@@ -136,11 +136,16 @@ spec:
   hosts:
   - httpbin.local
   gateways:
-  - httpbin-gateway  # Updated to match the Gateway name in namespace-a
+  - httpbin-gateway
   http:
   - match:
     - uri:
         prefix: /
+    retries:
+      attempts: 3
+      perTryTimeout: 2s
+      retryOn: "5xx,connect-failure,refused-stream"
+    timeout: 5s
     route:
     - destination:
         host: httpbin.namespace-a.svc.cluster.local
@@ -152,3 +157,7 @@ spec:
         port:
           number: 80
       weight: 50
+    mirror:
+      host: httpbin.namespace-b.svc.cluster.local
+      port:
+        number: 80

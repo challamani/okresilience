@@ -75,5 +75,57 @@ kubectl apply -f resources/kiali-gateway.yaml
 #add hostname mapping in /etc/host 
 #<external-ip> kiali.local
 ```
+[Access Kiali](http://kiali.local/)
 
-http://kiali.local/
+## Consolidated VirtualService and Outlier Detection
+
+1. **Retries in VirtualService**:
+   - Added retry logic to retry failed requests up to 3 times with a timeout of 2 seconds per attempt.
+
+2. **Outlier Detection in DestinationRule**:
+   - Configured outlier detection for `httpbin` in both `namespace-a` and `namespace-b`.
+   - Ejects unhealthy endpoints after 5 consecutive errors with a base ejection time of 30 seconds.
+
+### How to Apply Changes
+
+1. Apply the updated `VirtualService` configuration:
+   ```bash
+   kubectl apply -f resources/httpbin.yaml
+   ```
+
+2. Apply the updated `DestinationRule` configuration:
+   ```bash
+   kubectl apply -f istio/destinationrule.yaml
+   ```
+
+3. Verify the configurations:
+   ```bash
+   kubectl get virtualservice -n namespace-a
+   kubectl get destinationrule -n namespace-a
+   kubectl get destinationrule -n namespace-b
+   ```
+
+These changes ensure that the `VirtualService` and `DestinationRule` are properly configured for retries and outlier detection.
+
+## Debugging 503 Errors
+
+1. **Check VirtualService Configuration**:
+   - Ensure the `retries` and `timeout` settings are correctly applied.
+   - Apply the updated configuration:
+     ```bash
+     kubectl apply -f resources/httpbin.yaml
+     ```
+
+2. **Check DestinationRule Configuration**:
+   - Verify the `outlierDetection` and `loadBalancer` settings.
+   - Apply the updated configuration:
+     ```bash
+     kubectl apply -f resilience/destinationrule.yaml
+     ```
+
+3. **Inspect Istio Proxy Logs**:
+   - Check the logs of the Istio sidecar proxies:
+     ```bash
+     kubectl logs -l app=httpbin -n namespace-a -c istio-proxy
+     kubectl logs -l app=httpbin -n namespace-b -c istio-proxy
+     ```
