@@ -1,0 +1,154 @@
+# Namespace: namespace-a
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: namespace-a
+  labels:
+    istio-injection: enabled
+---
+# Namespace: namespace-b
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: namespace-b
+  labels:
+    istio-injection: enabled
+---
+# Deployment and Service for namespace-a
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin
+  namespace: namespace-a
+  labels:
+    app: httpbin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpbin
+  template:
+    metadata:
+      labels:
+        app: httpbin
+    spec:
+      containers:
+      - name: httpbin
+        image: kennethreitz/httpbin
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: httpbin
+  namespace: namespace-a
+  labels:
+    app: httpbin
+spec:
+  type: ClusterIP
+  selector:
+    app: httpbin
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+---
+# Deployment and Service for namespace-b
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin
+  namespace: namespace-b
+  labels:
+    app: httpbin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpbin
+  template:
+    metadata:
+      labels:
+        app: httpbin
+    spec:
+      containers:
+      - name: httpbin
+        image: kennethreitz/httpbin
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: httpbin
+  namespace: namespace-b
+  labels:
+    app: httpbin
+spec:
+  type: ClusterIP
+  selector:
+    app: httpbin
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: httpbin-gateway
+  namespace: namespace-a
+spec:
+  selector:
+    istio: ingressgateway # Use Istio's ingress gateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - httpbin.local
+---
+# VirtualService configuration for failover
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: httpbin
+  namespace: namespace-a
+spec:
+  hosts:
+  - httpbin.local
+  gateways:
+  - httpbin-gateway  # Updated to match the Gateway name in namespace-a
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: httpbin.namespace-a.svc.cluster.local
+        port:
+          number: 80
+      weight: 50
+    - destination:
+        host: httpbin.namespace-b.svc.cluster.local
+        port:
+          number: 80
+      weight: 50
