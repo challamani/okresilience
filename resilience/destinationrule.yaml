@@ -6,15 +6,11 @@ metadata:
 spec:
   host: httpbin.namespace-b.svc.cluster.local
   trafficPolicy:
-    loadBalancer:
-      simple: ROUND_ROBIN
     outlierDetection:
-      consecutive5xxErrors: 5
+      consecutive5xxErrors: 3
       interval: 10s
       baseEjectionTime: 30s
-    failover:
-      - from: namespace-b
-        to: namespace-a
+      maxEjectionPercent: 50
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: DestinationRule
@@ -24,12 +20,8 @@ metadata:
 spec:
   host: httpbin.namespace-a.svc.cluster.local
   trafficPolicy:
-    loadBalancer:
-      simple: ROUND_ROBIN
     outlierDetection:
       consecutive5xxErrors: 5
       interval: 10s
       baseEjectionTime: 30s
-    failover:
-      - from: namespace-a
-        to: namespace-b
+      maxEjectionPercent: 50

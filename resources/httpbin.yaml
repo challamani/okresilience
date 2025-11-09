@@ -144,7 +144,7 @@ spec:
     retries:
       attempts: 3
       perTryTimeout: 2s
-      retryOn: "5xx,connect-failure,refused-stream"
+      retryOn: "5xx,gateway-error,connect-failure,refused-stream,reset"
     timeout: 5s
     route:
     - destination:
@@ -157,7 +157,3 @@ spec:
         port:
           number: 80
       weight: 50
-    mirror:
-      host: httpbin.namespace-b.svc.cluster.local
-      port:
-        number: 80
