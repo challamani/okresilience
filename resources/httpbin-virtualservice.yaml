@@ -1,0 +1,49 @@
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: httpbin-aggregate
+  namespace: namespace-a
+spec:
+  hosts:
+  - httpbin.local
+  ports:
+  - number: 80
+    name: http
+    protocol: HTTP
+  resolution: DNS
+  endpoints:
+  - address: httpbin.namespace-a.svc.cluster.local
+    ports:
+      http: 80
+    labels:
+      version: a
+  - address: httpbin.namespace-b.svc.cluster.local
+    ports:
+      http: 80
+    labels:
+      version: b
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: httpbin
+  namespace: namespace-a
+spec:
+  hosts:
+  - httpbin.local
+  gateways:
+  - httpbin-gateway
+  http:
+  - route:
+    - destination:
+        host: httpbin.local
+        subset: ns-a
+      weight: 100
+    - destination:
+        host: httpbin.local
+        subset: ns-b
+      weight: 0
+    retries:
+      attempts: 3
+      perTryTimeout: 2s
+      retryOn: 5xx,connect-failure,refused-stream,retriable-status-codes,gateway-error

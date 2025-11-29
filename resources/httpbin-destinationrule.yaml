@@ -1,0 +1,20 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: httpbin-failover
+  namespace: namespace-a
+spec:
+  host: httpbin.local
+  trafficPolicy:
+    outlierDetection:
+      consecutive5xxErrors: 2
+      interval: 5s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 100
+  subsets:
+  - name: ns-a
+    labels:
+      version: a
+  - name: ns-b
+    labels:
+      version: b
