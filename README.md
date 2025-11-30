@@ -2,11 +2,44 @@
 
 CLI tool for testing Gateway resilience
 
-## Features
+Planned Features (Coming Soon):
 
-- **Traffic Generation**: Sends a configurable number of test requests to the service endpoint.
-- **Metrics Validation**: Queries Prometheus metrics to validate resilience settings.
-- **Retries Configuration**: Reads retries configuration from the VirtualService resource.
+- Simulating TCP Failures (e.g., connection failures, resets)
+- Simulating HTTP Failures (e.g., gateway failures, upstream timeouts, retryable 5XX errors for GET requests)
+- Gateway Retries
+- Outlier Detection
+- Circuit Breaking
+
+## Prerequisites
+
+- Docker
+- Kind/Minikube
+- istioctl
+- Go 1.18+
+
+## Httpbin in Kind Cluster
+
+To set up the `httpbin` service in a local Kubernetes cluster using Kind, follow these steps:
+
+- Create a Kind cluster if you don't have one already:
+
+```bash
+./scripts/kind-setup.sh
+```
+
+- Setup Istio, Kiali, and Prometheus:
+
+```bash
+# Install Istio using istioctl
+istioctl install --set profile=demo -y
+./scripts/install-kiali.sh
+```
+
+- Deploy httpbin application:
+
+```bash
+./scripts/deploy-httpbin.sh
+```
 
 ## Setup
 
@@ -26,17 +59,19 @@ go build -o okresilience ./cmd/okresilience
 
 ```bash
 PROMETHEUS_URL=http://prometheus.local
-SERVICE_ENDPOINT=http://httpbin.local/status/200
+SERVICE_ENDPOINT=http://httpbin.local/status/500
 NAMESPACE=demo
 VIRTUAL_SERVICE=httpbin-vs
 RESPONSE_CODE=500
+APP=httpbin
 
 ./okresilience --prometheus-url=$PROMETHEUS_URL \
     --service-endpoint=$SERVICE_ENDPOINT \
     --namespace=$NAMESPACE \
     --virtual-service=$VIRTUAL_SERVICE \
+    --num-requests=1 \
     --response-code=$RESPONSE_CODE \
-    --num-requests=2
+    --app=$APP
 ```
 
 ### Notes
