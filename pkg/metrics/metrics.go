@@ -109,7 +109,7 @@ func GetRetriesConfiguration(namespace, serviceName string) (int, error) {
 	}
 
 	// Extract the retries configuration
-	if vs.Spec.Http == nil || len(vs.Spec.Http) == 0 {
+	if len(vs.Spec.Http) == 0 {
 		return 0, fmt.Errorf("no HTTP routes found in VirtualService")
 	}
 
