@@ -2,63 +2,9 @@
 
 CLI tool for testing Gateway resilience
 
-Planned Features (Coming Soon):
-
-- Simulating TCP Failures (e.g., connection failures, resets)
-- Simulating HTTP Failures (e.g., gateway failures, upstream timeouts, retryable 5XX errors for GET requests)
-- Outlier Detection
-- Circuit Breaking
-
-## Prerequisites
-
-- Docker
-- Kind/Minikube
-- istioctl
-
-## Create a cluster using kind
-
-```shell
-#create a kind cluster with name 'okresilience'
-./scripts/kind-setup.sh
-```
-
-## Install istio
-
-```shell
-istioctl install --set profile=demo -y
-```
-
-## Install Kiali Dashboard
-
-- Install Kiali with Prometheus in `istio-system` namespace
-
-```shell
-./scripts/install-kiali.sh
-```
-
-- [Access Kiali](http://kiali.local/)
-
-## Deploy a sample httpbin application
-
-```shell
-./scripts/deploy-httpbin.sh
-```
-
-### generate traffic to httpbin
-
-[Launch httpbin in browser](http://httpbin.local)
-
-```shell
-for i in {1..10}; do curl -s -D - -o /dev/null  "http://httpbin.local/status/200"; done
-```
-
-# OkResilience
-
-CLI tool to validate Kubernetes ingress gateway resilience.
-
 ## Features
 
-- **Traffic Generation**: Sends a configurable number of test requests to the ingress gateway.
+- **Traffic Generation**: Sends a configurable number of test requests to the service endpoint.
 - **Metrics Validation**: Queries Prometheus metrics to validate resilience settings.
 - **Retries Configuration**: Reads retries configuration from the VirtualService resource.
 
@@ -79,5 +25,21 @@ go build -o okresilience ./cmd/okresilience
 ## Run
 
 ```bash
-./okresilience --prometheus-url=http://<PROMETHEUS_URL> --gateway-url=http://<GATEWAY_URL> --namespace=demo --service-name=httpbin --num-requests=10
+PROMETHEUS_URL=http://prometheus.local
+SERVICE_ENDPOINT=http://httpbin.local/status/200
+NAMESPACE=demo
+VIRTUAL_SERVICE=httpbin-vs
+RESPONSE_CODE=500
+
+./okresilience --prometheus-url=$PROMETHEUS_URL \
+    --service-endpoint=$SERVICE_ENDPOINT \
+    --namespace=$NAMESPACE \
+    --virtual-service=$VIRTUAL_SERVICE \
+    --response-code=$RESPONSE_CODE \
+    --num-requests=2
 ```
+
+### Notes
+
+- The `--response-code` flag specifies the expected HTTP response code for metrics validation (default: `200`).
+- The CLI queries Prometheus metrics for the last 5 minutes to validate resilience settings.

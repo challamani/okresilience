@@ -27,10 +27,11 @@ type PrometheusResponse struct {
 	} `json:"data"`
 }
 
-// ValidateMetrics queries Prometheus and validates the metrics.
-func ValidateMetrics(prometheusURL, namespace string, expectedRequests int) error {
-	query := fmt.Sprintf(`istio_requests_total{namespace="%s"}`, namespace)
-	url := fmt.Sprintf("%s/api/v1/query?query=%s", prometheusURL, query)
+// ValidateMetrics queries Prometheus and validates the metrics based on the expected HTTP response code and timeframe.
+func ValidateMetrics(prometheusURL, namespace string, expectedRequests int, responseCode, startTimestamp, endTimestamp string) error {
+	// Construct the Prometheus query
+	query := fmt.Sprintf(`istio_requests_total{namespace="%s",response_code="%s"}`, namespace, responseCode)
+	url := fmt.Sprintf("%s/api/v1/query_range?query=%s&start=%s&end=%s&step=30s", prometheusURL, query, startTimestamp, endTimestamp)
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -48,16 +49,35 @@ func ValidateMetrics(prometheusURL, namespace string, expectedRequests int) erro
 		return fmt.Errorf("error unmarshalling Prometheus response: %v", err)
 	}
 
+	// Check if the query returned any results
+	if len(promResp.Data.Result) == 0 {
+		return fmt.Errorf("no metrics found for query: %s", query)
+	}
+
 	// Extract metrics and validate
 	totalRequests := 0
 	for _, result := range promResp.Data.Result {
-		if value, ok := result.Value[1].(string); ok {
-			metricValue, err := strconv.Atoi(value)
-			if err != nil {
-				return fmt.Errorf("error converting metric value: %v", err)
-			}
-			totalRequests += metricValue
+		// Ensure the Value slice has at least two elements
+		if len(result.Value) < 2 {
+			log.Printf("Skipping result with insufficient Value data: %v", result.Value)
+			continue
 		}
+
+		// Ensure the second element of Value is a string
+		valueStr, ok := result.Value[1].(string)
+		if !ok {
+			log.Printf("Skipping result with invalid Value data: %v", result.Value)
+			continue
+		}
+
+		// Convert the string value to an integer
+		metricValue, err := strconv.Atoi(valueStr)
+		if err != nil {
+			log.Printf("Skipping result with non-integer Value: %v", result.Value)
+			continue
+		}
+
+		totalRequests += metricValue
 	}
 
 	if totalRequests != expectedRequests {
@@ -66,6 +86,67 @@ func ValidateMetrics(prometheusURL, namespace string, expectedRequests int) erro
 
 	log.Printf("Metrics validation successful: %d requests matched", totalRequests)
 	return nil
+}
+
+// QueryMetrics queries Prometheus and returns the total number of requests for the given parameters.
+func QueryMetrics(prometheusURL, app, namespace, responseCode string) (int, error) {
+	// Construct the Prometheus query with default labels
+	query := fmt.Sprintf(`istio_requests_total{destination_app="%s",namespace="%s",response_code="%s"}`,
+		app, namespace, responseCode)
+	url := fmt.Sprintf("%s/api/v1/query?query=%s", prometheusURL, query)
+
+	// Log the query for debugging
+	log.Printf("Executing Prometheus query: %s", url)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("error querying Prometheus: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("error reading Prometheus response: %v", err)
+	}
+
+	var promResp PrometheusResponse
+	if err := json.Unmarshal(body, &promResp); err != nil {
+		return 0, fmt.Errorf("error unmarshalling Prometheus response: %v", err)
+	}
+
+	// Check if the query returned any results
+	if len(promResp.Data.Result) == 0 {
+		log.Printf("No metrics found for query: %s", query)
+		return 0, nil
+	}
+
+	// Extract metrics
+	totalRequests := 0
+	for _, result := range promResp.Data.Result {
+		// Ensure the Value slice has at least two elements
+		if len(result.Value) < 2 {
+			log.Printf("Skipping result with insufficient Value data: %v", result.Value)
+			continue
+		}
+
+		// Ensure the second element of Value is a string
+		valueStr, ok := result.Value[1].(string)
+		if !ok {
+			log.Printf("Skipping result with invalid Value data: %v", result.Value)
+			continue
+		}
+
+		// Convert the string value to an integer
+		metricValue, err := strconv.Atoi(valueStr)
+		if err != nil {
+			log.Printf("Skipping result with non-integer Value: %v", result.Value)
+			continue
+		}
+
+		totalRequests += metricValue
+	}
+
+	return totalRequests, nil
 }
 
 // GetRetriesConfiguration fetches the retries configuration from the VirtualService.
