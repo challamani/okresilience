@@ -12,12 +12,30 @@ Planned Features (Coming Soon):
 
 ## Prerequisites
 
-- Docker
-- Kind/Minikube
-- istioctl
-- Go 1.18+
+Ensure the following tools are installed on your system:
 
-## Httpbin in Kind Cluster
+- [Homebrew](https://brew.sh/) (for macOS/Linux users)
+- [Go](https://golang.org/) (version 1.18 or later)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- [istioctl](https://istio.io/latest/docs/setup/getting-started/)
+- [kind](https://kind.sigs.k8s.io/)
+
+### Install Prerequisites
+
+For macOS/Linux users, you can install the tools using Homebrew:
+
+```bash
+brew install go
+brew install kubectl
+brew install istioctl
+brew install kind
+```
+
+For other platforms, refer to the official installation guides for each tool.
+
+### Setting Up the Environment
+
+### Httpbin in Kind Cluster
 
 To set up the `httpbin` service in a local Kubernetes cluster using Kind, follow these steps:
 
@@ -78,3 +96,16 @@ APP=httpbin
 
 - The `--response-code` flag specifies the expected HTTP response code for metrics validation (default: `200`).
 - The CLI queries Prometheus metrics for the last 5 minutes to validate resilience settings.
+
+## Running Unit Tests
+
+To run the unit tests for the project, use the following command:
+
+```bash
+#This will execute all tests in the project and display detailed output.
+go test ./... -v
+```
+
+## Validating Metrics
+
+Use the `ValidateMetrics` function to validate Prometheus metrics for your application. Refer to the `metrics_test.go` file for example usage.
