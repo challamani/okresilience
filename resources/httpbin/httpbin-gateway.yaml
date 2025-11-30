@@ -2,7 +2,7 @@ apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:
   name: httpbin-gateway
-  namespace: namespace-a
+  namespace: demo
 spec:
   selector:
     istio: ingressgateway # Use Istio's ingress gateway

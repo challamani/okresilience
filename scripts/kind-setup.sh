@@ -20,6 +20,7 @@ create_kind_cluster() {
 
 # Function to activate cloud-provider-kind
 activate_cloud_provider_kind() {
+  #[Load Balancer](https://kind.sigs.k8s.io/docs/user/loadbalancer/) service
   echo "Activating cloud-provider-kind..."
   sudo cloud-provider-kind --gateway-channel standard
 }

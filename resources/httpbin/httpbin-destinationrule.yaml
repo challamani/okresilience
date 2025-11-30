@@ -1,0 +1,13 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: httpbin-dr
+  namespace: demo
+spec:
+  host: httpbin.demo.svc.cluster.local
+  trafficPolicy:
+    outlierDetection:
+      consecutive5xxErrors: 50
+      interval: 30s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 100
