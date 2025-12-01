@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tcp-reset-service
+  namespace: demo
+  labels:
+    app: tcp-reset-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tcp-reset-service
+  template:
+    metadata:
+      labels:
+        app: tcp-reset-service
+    spec:
+      containers:
+      - name: tcp-reset-service
+        image: tcp-reset-service:local
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 5m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tcp-reset-service
+  namespace: demo
+spec:
+  selector:
+    app: tcp-reset-service
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: tcp

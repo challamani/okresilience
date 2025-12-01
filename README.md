@@ -48,15 +48,20 @@ To set up the `httpbin` service in a local Kubernetes cluster using Kind, follow
 - Setup Istio, Kiali, and Prometheus:
 
 ```bash
-# Install Istio using istioctl
-istioctl install --set profile=demo -y
-./scripts/install-kiali.sh
+# Install Istio using istioctl, then Kiali and Prometheus.
+./scripts/install-istio.sh
 ```
 
 - Deploy httpbin application:
 
 ```bash
 ./scripts/deploy-httpbin.sh
+```
+
+- Generate some traffic to httpbin:
+
+```bash
+for i in {1..10}; do curl -s -D - -o /dev/null http://httpbin.local/status/200; done
 ```
 
 ## Setup
@@ -99,6 +104,30 @@ APP=httpbin
 
 ## Running Unit Tests
 
+## TCP Failure Simulation
+
+See `resources/tcp-reset-service/` for a simple service that emits TCP RST packets to simulate connection failures.
+
+Quick start:
+
+```zsh
+# Build and deploy
+docker build -t tcp-reset-service:local resources/tcp-reset-service
+kind load docker-image tcp-reset-service:local --name <your-cluster>
+kubectl apply -f resources/tcp-reset-service/deployment.yaml
+
+# Route httpbin traffic to failing service
+kubectl apply -f resources/tcp-reset-service/tcp-reset-virtualservice.yaml
+
+# Test: expect connection failures
+for i in {1..10}; do curl -v --max-time 3 http://httpbin.local/status/200 || echo "tcp failure"; done
+
+# Cleanup
+kubectl delete -f resources/tcp-reset-service/tcp-reset-virtualservice.yaml
+kubectl delete -f resources/tcp-reset-service/deployment.yaml
+```
+
+**Note**: TCP-level failures won't appear in `istio_requests_total` metrics (no HTTP request is formed). Look for client-side connection errors and `istio_tcp_*` metrics instead. See `resources/tcp-reset-service/README.md` for details.
 To run the unit tests for the project, use the following command:
 
 ```bash

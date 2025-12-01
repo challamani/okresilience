@@ -3,6 +3,9 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
+echo "Installing Istio with demo profile..."
+istioctl install --set profile=demo -y
+
 echo "Installing Kiali and Prometheus addons..."
 kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.28/samples/addons/kiali.yaml
 kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.28/samples/addons/prometheus.yaml
