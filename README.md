@@ -105,7 +105,3 @@ To run the unit tests for the project, use the following command:
 #This will execute all tests in the project and display detailed output.
 go test ./... -v
 ```
-
-## Validating Metrics
-
-Use the `ValidateMetrics` function to validate Prometheus metrics for your application. Refer to the `metrics_test.go` file for example usage.
