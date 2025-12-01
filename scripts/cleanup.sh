@@ -6,8 +6,8 @@ set -e
 # Function to clean up Kubernetes resources
 cleanup_kubernetes_resources() {
   echo "Cleaning up Kubernetes resources..."
-  kubectl delete -f resources/httpbin/httpbin-* || echo "Kubernetes resources not found or already deleted."
   kubectl delete -f resources/httpbin/httpbin.yaml || echo "Kubernetes resources not found or already deleted."
+  kubectl delete -f resources/tcp-reset-service/deployment.yaml || echo "Kubernetes resources not found or already deleted."
   echo "Kubernetes resources cleaned up successfully."
 }
 
