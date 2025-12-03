@@ -72,7 +72,7 @@ for i in {1..10}; do curl -s -D - -o /dev/null http://httpbin.local/status/200; 
 go mod tidy
 ```
 
-## Build
+- Build the CLI tool:
 
 ```bash
 go build -o okresilience ./cmd/okresilience
@@ -80,57 +80,42 @@ go build -o okresilience ./cmd/okresilience
 
 ## Run
 
-```bash
-PROMETHEUS_URL=http://prometheus.local
-SERVICE_ENDPOINT=http://httpbin.local/status/500
-NAMESPACE=demo
-VIRTUAL_SERVICE=httpbin-vs
-RESPONSE_CODE=500
-APP=httpbin
+### Validate upstream 5xx failures with retries
 
-./okresilience upstream5xxFailures --prometheus-url=$PROMETHEUS_URL \
-    --service-endpoint=$SERVICE_ENDPOINT \
-    --namespace=$NAMESPACE \
-    --virtual-service=$VIRTUAL_SERVICE \
+```bash
+./okresilience upstream5xxFailures \
+    --prometheus-url=http://prometheus.local \
+    --service-endpoint=http://httpbin.local/status/500 \
+    --namespace=demo \
+    --virtual-service=httpbin-vs \
     --num-requests=1 \
-    --response-code=$RESPONSE_CODE \
-    --app=$APP
+    --response-code=500 \
+    --app=httpbin
 ```
 
-### Notes
+### Validate upstream TCP resets
 
-- The `--response-code` flag specifies the expected HTTP response code for metrics validation (default: `200`).
-- The CLI queries Prometheus metrics before and after the test traffic execution and calculates the difference.
-- The difference is used to validate if the gateway retries are functioning as expected.
+```bash
+./okresilience upstreamTcpReset \
+    --prometheus-url=http://prometheus.local \
+    --service-endpoint=http://httpbin.local/status/200 \
+    --namespace=demo \
+    --virtual-service=httpbin-vs \
+    --num-requests=1 \
+    --response-code=503 \
+    --source-app=istio-ingressgateway
+```
 
 ## Running Unit Tests
 
-## TCP Failure Simulation
-
-See `resources/tcp-reset-service/` for a simple service that emits TCP RST packets to simulate connection failures.
-
-Quick start:
-
-```zsh
-# This script builds and deploys the tcp-reset-service
-./scripts/deploy-tcp-reset-service.sh
-```
-
-**Note**: TCP-level failures won't appear in `istio_requests_total` metrics (no HTTP request is formed). Look for client-side connection errors and `istio_tcp_*` metrics instead. See `resources/tcp-reset-service/README.md` for details.
-To run the unit tests for the project, use the following command:
-
 ```bash
-#This will execute all tests in the project and display detailed output.
 go test ./... -v
 ```
 
-```shell
-./okresilience upstreamTcpReset --prometheus-url=$PROMETHEUS_URL \
-    --service-endpoint=$SERVICE_ENDPOINT \
-    --namespace=$NAMESPACE \
-    --virtual-service=$VIRTUAL_SERVICE \
-    --num-requests=1 \
-    --response-code=$RESPONSE_CODE \
-    --app=$APP
+## TCP Failure Simulation
 
+Deploy the tcp-reset-service for testing TCP failures:
+
+```bash
+./scripts/deploy-tcp-reset-service.sh
 ```

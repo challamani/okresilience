@@ -37,15 +37,6 @@ func main() {
 				log.Fatalf("Error fetching retries configuration: %v", err)
 			}
 
-			// Query source TCP closed metrics before (optional)
-			var beforeSourceClosed int
-			if sourceApp != "" {
-				beforeSourceClosed, err = metrics.QueryTcpClosedSource(prometheusURL, sourceApp, namespace, "UF,URX")
-				if err != nil {
-					log.Printf("Warning: error querying source TCP closed metrics before: %v", err)
-				}
-				log.Printf("TCP closed (source) before: %d", beforeSourceClosed)
-			}
 			// Query metrics before traffic generation
 			beforeRequests, err := metrics.QueryMetrics(prometheusURL, app, namespace, responseCode)
 			if err != nil {
@@ -96,23 +87,18 @@ func main() {
 		Use:   "upstreamTcpReset",
 		Short: "Validate behavior for upstream TCP resets (UF/URX)",
 		Run: func(cmd *cobra.Command, args []string) {
+			// Fetch retries configuration
+			retries, err := metrics.GetRetriesConfiguration(namespace, virtualService)
+			if err != nil {
+				log.Fatalf("Error fetching retries configuration: %v", err)
+			}
+
 			// Query destination TCP closed metrics before
 			beforeClosed, err := metrics.QueryTcpClosedDest(prometheusURL, namespace, "UF,URX")
 			if err != nil {
 				log.Fatalf("Error querying TCP closed metrics before: %v", err)
 			}
 			log.Printf("TCP closed (dest) before: %d", beforeClosed)
-
-			// Query source TCP closed metrics before (optional)
-			var beforeSourceClosed int
-			if sourceApp != "" {
-				beforeSourceClosed, err = metrics.QueryTcpClosedSource(prometheusURL, sourceApp, namespace, "UF,URX")
-				if err != nil {
-					log.Printf("Warning: error querying source TCP closed metrics before: %v", err)
-				} else {
-					log.Printf("TCP closed (source) before: %d", beforeSourceClosed)
-				}
-			}
 
 			// Generate test traffic
 			if err := traffic.GenerateTraffic(serviceEndpoint, namespace, virtualService, numRequests); err != nil {
@@ -134,24 +120,9 @@ func main() {
 				log.Printf("TCP closed (dest) after (attempt %d): %d", attempt, afterClosed)
 
 				actualDest := afterClosed - beforeClosed
-				expectedDest := numRequests
-				var sourceOK bool = true
-				if sourceApp != "" {
-					afterSourceClosed, err := metrics.QueryTcpClosedSource(prometheusURL, sourceApp, namespace, "UF,URX")
-					if err != nil {
-						log.Printf("Warning: error querying source TCP closed metrics after: %v", err)
-					} else {
-						sourceDiff := afterSourceClosed - beforeSourceClosed
-						if sourceDiff != numRequests {
-							log.Printf("Source TCP validation failed (attempt %d): expected %d closed, got %d", attempt, numRequests, sourceDiff)
-							sourceOK = false
-						} else {
-							log.Printf("Source TCP validation passed (attempt %d): %d closed", attempt, sourceDiff)
-						}
-					}
-				}
+				expectedDest := numRequests * (retries + 1)
 
-				if actualDest == expectedDest && sourceOK {
+				if actualDest == expectedDest {
 					fmt.Printf("%sTCP upstream failure validation succeeded.%s\n", colorGreen, colorReset)
 					return
 				}
