@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	istioClient "istio.io/client-go/pkg/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -86,6 +87,112 @@ func QueryMetrics(prometheusURL, app, namespace, responseCode string) (int, erro
 	}
 
 	return totalRequests, nil
+}
+
+// QueryTcpClosedDest queries destination-side TCP closed connections filtered by response_flags (e.g., UF|URX).
+func QueryTcpClosedDest(prometheusURL, namespace, flagsCSV string) (int, error) {
+
+	query := fmt.Sprintf(`istio_tcp_connections_closed_total{namespace="%s",response_flags="%s"}`,
+		namespace, flagsCSV)
+	url := fmt.Sprintf("%s/api/v1/query?query=%s", prometheusURL, query)
+
+	log.Printf("Executing Prometheus query (dest TCP closed): %s", url)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("error querying Prometheus: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("error reading Prometheus response: %v", err)
+	}
+
+	var promResp PrometheusResponse
+	if err := json.Unmarshal(body, &promResp); err != nil {
+		return 0, fmt.Errorf("error unmarshalling Prometheus response: %v", err)
+	}
+
+	if len(promResp.Data.Result) == 0 {
+		log.Printf("No metrics found for query: %s", query)
+		return 0, nil
+	}
+
+	total := 0
+	for _, result := range promResp.Data.Result {
+		if len(result.Value) < 2 {
+			log.Printf("Skipping result with insufficient Value data: %v", result.Value)
+			continue
+		}
+		valueStr, ok := result.Value[1].(string)
+		if !ok {
+			log.Printf("Skipping result with invalid Value data: %v", result.Value)
+			continue
+		}
+		// Prom returns float as string; parse to float then cast
+		valFloat, err := strconv.ParseFloat(valueStr, 64)
+		if err != nil {
+			log.Printf("Skipping result with non-float Value: %v", result.Value)
+			continue
+		}
+		total += int(valFloat)
+	}
+	return total, nil
+}
+
+// QueryTcpClosedSource queries source-side TCP closed connections filtered by response_flags (e.g., UF|URX).
+func QueryTcpClosedSource(prometheusURL, sourceApp, namespace, flagsCSV string) (int, error) {
+	flagsRegex := "UF|URX"
+	if flagsCSV != "" {
+		flagsRegex = strings.ReplaceAll(flagsCSV, ",", "|")
+	}
+	query := fmt.Sprintf(`istio_tcp_connections_closed_total{source_workload="%s",namespace="%s",response_flags=~"%s"}`,
+		sourceApp, namespace, flagsRegex)
+	url := fmt.Sprintf("%s/api/v1/query?query=%s", prometheusURL, query)
+
+	log.Printf("Executing Prometheus query (source TCP closed): %s", url)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("error querying Prometheus: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("error reading Prometheus response: %v", err)
+	}
+
+	var promResp PrometheusResponse
+	if err := json.Unmarshal(body, &promResp); err != nil {
+		return 0, fmt.Errorf("error unmarshalling Prometheus response: %v", err)
+	}
+
+	if len(promResp.Data.Result) == 0 {
+		log.Printf("No metrics found for query: %s", query)
+		return 0, nil
+	}
+
+	total := 0
+	for _, result := range promResp.Data.Result {
+		if len(result.Value) < 2 {
+			log.Printf("Skipping result with insufficient Value data: %v", result.Value)
+			continue
+		}
+		valueStr, ok := result.Value[1].(string)
+		if !ok {
+			log.Printf("Skipping result with invalid Value data: %v", result.Value)
+			continue
+		}
+		valFloat, err := strconv.ParseFloat(valueStr, 64)
+		if err != nil {
+			log.Printf("Skipping result with non-float Value: %v", result.Value)
+			continue
+		}
+		total += int(valFloat)
+	}
+	return total, nil
 }
 
 // GetRetriesConfiguration fetches the retries configuration from the VirtualService.

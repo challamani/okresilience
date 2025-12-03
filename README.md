@@ -88,7 +88,7 @@ VIRTUAL_SERVICE=httpbin-vs
 RESPONSE_CODE=500
 APP=httpbin
 
-./okresilience --prometheus-url=$PROMETHEUS_URL \
+./okresilience upstream5xxFailures --prometheus-url=$PROMETHEUS_URL \
     --service-endpoint=$SERVICE_ENDPOINT \
     --namespace=$NAMESPACE \
     --virtual-service=$VIRTUAL_SERVICE \
@@ -100,7 +100,8 @@ APP=httpbin
 ### Notes
 
 - The `--response-code` flag specifies the expected HTTP response code for metrics validation (default: `200`).
-- The CLI queries Prometheus metrics for the last 5 minutes to validate resilience settings.
+- The CLI queries Prometheus metrics before and after the test traffic execution and calculates the difference.
+- The difference is used to validate if the gateway retries are functioning as expected.
 
 ## Running Unit Tests
 
@@ -111,20 +112,8 @@ See `resources/tcp-reset-service/` for a simple service that emits TCP RST packe
 Quick start:
 
 ```zsh
-# Build and deploy
-docker build -t tcp-reset-service:local resources/tcp-reset-service
-kind load docker-image tcp-reset-service:local --name <your-cluster>
-kubectl apply -f resources/tcp-reset-service/deployment.yaml
-
-# Route httpbin traffic to failing service
-kubectl apply -f resources/tcp-reset-service/tcp-reset-virtualservice.yaml
-
-# Test: expect connection failures
-for i in {1..10}; do curl -v --max-time 3 http://httpbin.local/status/200 || echo "tcp failure"; done
-
-# Cleanup
-kubectl delete -f resources/tcp-reset-service/tcp-reset-virtualservice.yaml
-kubectl delete -f resources/tcp-reset-service/deployment.yaml
+# This script builds and deploys the tcp-reset-service
+./scripts/deploy-tcp-reset-service.sh
 ```
 
 **Note**: TCP-level failures won't appear in `istio_requests_total` metrics (no HTTP request is formed). Look for client-side connection errors and `istio_tcp_*` metrics instead. See `resources/tcp-reset-service/README.md` for details.
@@ -133,4 +122,15 @@ To run the unit tests for the project, use the following command:
 ```bash
 #This will execute all tests in the project and display detailed output.
 go test ./... -v
+```
+
+```shell
+./okresilience upstreamTcpReset --prometheus-url=$PROMETHEUS_URL \
+    --service-endpoint=$SERVICE_ENDPOINT \
+    --namespace=$NAMESPACE \
+    --virtual-service=$VIRTUAL_SERVICE \
+    --num-requests=1 \
+    --response-code=$RESPONSE_CODE \
+    --app=$APP
+
 ```
