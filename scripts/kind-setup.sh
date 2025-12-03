@@ -3,19 +3,29 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
+# Color codes
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Function to print success message with green tick
+print_success() {
+  echo -e "${GREEN}✓${NC} $1"
+}
+
 # Function to install prerequisites
 install_prerequisites() {
   echo "Installing prerequisites..."
   brew install kind || echo "Kind is already installed."
+  print_success "Kind installed"
   brew install cloud-provider-kind || echo "cloud-provider-kind is already installed."
-  echo "Prerequisites installed successfully."
+  print_success "cloud-provider-kind installed"
 }
 
 # Function to create a Kind cluster
 create_kind_cluster() {
   echo "Creating Kind cluster..."
   kind create cluster --name ok-resilience
-  echo "Kind cluster created successfully."
+  print_success "Kind cluster created successfully"
 }
 
 # Function to activate cloud-provider-kind

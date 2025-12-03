@@ -98,9 +98,9 @@ go build -o okresilience ./cmd/okresilience
 ```bash
 ./okresilience upstreamTcpReset \
     --prometheus-url=http://prometheus.local \
-    --service-endpoint=http://httpbin.local/status/200 \
-    --namespace=demo \
-    --virtual-service=httpbin-vs \
+    --service-endpoint=http://tcp-reset-service.local/ \
+    --namespace=tcp-reset-demo \
+    --virtual-service=tcp-reset-vs \
     --num-requests=1 \
     --response-code=503 \
     --source-app=istio-ingressgateway

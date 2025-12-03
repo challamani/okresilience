@@ -1,0 +1,41 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: tcp-reset-gateway
+  namespace: tcp-reset-demo
+spec:
+  selector:
+    istio: ingressgateway # Use Istio's ingress gateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - tcp-reset-service.local
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: tcp-reset-vs
+  namespace: tcp-reset-demo
+spec:
+  hosts:
+    - "tcp-reset-service.local"
+  gateways:
+    - tcp-reset-gateway
+  http:
+    - match:
+      - uri:
+          prefix: /
+      retries:
+        attempts: 3
+        perTryTimeout: 5s
+        retryOn: "5xx,gateway-error,connect-failure,refused-stream,reset"
+      timeout: 20s
+      route:
+      - destination:
+          host: tcp-reset-service.tcp-reset-demo.svc.cluster.local
+          port:
+            number: 80
+        weight: 100
