@@ -25,7 +25,7 @@ kubectl apply -f resources/tcp-reset-service/deployment.yaml
 print_success "TCP Reset Service deployed"
 
 echo "Override existing virtual service to route traffic to TCP Reset Service..."
-kubectl apply -f resources/tcp-reset-service/virtualservice.yaml
+kubectl apply -f resources/tcp-reset-service/gateway.yaml
 print_success "Virtual service configured for TCP Reset Service"
 
 echo "Add hostname mapping in /etc/hosts, would require sudo access"

@@ -1,0 +1,46 @@
+# TCP Reset Injection for Redis Service
+# This EnvoyFilter causes TCP connections to be rejected by routing to a non-existent cluster
+# effectively simulating connection resets/failures
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: tcp-reset-injection
+  namespace: demo
+spec:
+  workloadSelector:
+    labels:
+      app: redis
+  configPatches:
+  - applyTo: NETWORK_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        portNumber: 6379
+        filterChain:
+          filter:
+            name: "envoy.filters.network.tcp_proxy"
+    patch:
+      operation: MERGE
+      value:
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+          stat_prefix: tcp_fault_injection
+          cluster: "blackhole_cluster"
+  - applyTo: CLUSTER
+    match:
+      context: SIDECAR_INBOUND
+    patch:
+      operation: ADD
+      value:
+        name: "blackhole_cluster"
+        type: STATIC
+        connect_timeout: 0.001s
+        load_assignment:
+          cluster_name: "blackhole_cluster"
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 127.0.0.1
+                    port_value: 1

@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: tcp-reset-demo
+  name: tcp-ns
   labels:
     istio-injection: enabled
 ---
@@ -9,7 +9,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tcp-reset-service
-  namespace: tcp-reset-demo
+  namespace: tcp-ns
   labels:
     app: tcp-reset-service
 spec:
@@ -40,7 +40,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: tcp-reset-service
-  namespace: tcp-reset-demo
+  namespace: tcp-ns
 spec:
   selector:
     app: tcp-reset-service

@@ -1,0 +1,29 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: tcp-delay-injection
+  namespace: demo
+spec:
+  workloadSelector:
+    labels:
+      app: redis
+  configPatches:
+  - applyTo: NETWORK_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        portNumber: 6379
+        filterChain:
+          filter:
+            name: "envoy.filters.network.tcp_proxy"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.network.fault
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.fault.v3.Fault
+          delay:
+            fixed_delay: 5s
+            percentage:
+              numerator: 100
+              denominator: HUNDRED

@@ -17,7 +17,7 @@ kubectl apply -f resources/httpbin/deployment.yaml
 print_success "httpbin deployment installed"
 
 echo "Configuring Gateway, VirtualService and DestinationRule for httpbin..."
-kubectl apply -f resources/httpbin/virtualservice.yaml
+kubectl apply -f resources/httpbin/gateway.yaml
 print_success "httpbin virtual service configured"
 
 echo "Add hostname mapping in /etc/hosts, would require sudo access"

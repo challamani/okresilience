@@ -2,13 +2,22 @@
 
 CLI tool for testing Gateway resilience
 
-Planned Features (Coming Soon):
+## Overview
+
+This tool is designed to help validate the resilience of API Gateways (such as Istio Ingress Gateway) by simulating various failure scenarios and observing how the gateway handles them. It focuses on two main types of failures.
 
 - Simulating TCP Failures (e.g., connection failures, resets)
 - Simulating HTTP Failures (e.g., gateway failures, upstream timeouts, retryable 5XX errors for GET requests)
-- Gateway Retries
-- Outlier Detection
-- Circuit Breaking
+
+Assert the gateway's behavior under these failure conditions by checking metrics from Prometheus.
+
+Tool supports the following resilience tests:
+
+- Gateway Retries on Upstream 5xx Failures
+- Gateway Retries on Upstream TCP Resets
+- Outlier Detection and Ejection (Circuit Breaking)  
+- Validate Gateway Per Request Timeouts
+- Failover Testing for Multi-Cluster Gateways
 
 ## Prerequisites
 
@@ -42,7 +51,7 @@ To set up the `httpbin` service in a local Kubernetes cluster using Kind, follow
 - Create a Kind cluster if you don't have one already:
 
 ```bash
-./scripts/kind-setup.sh
+./scripts/setup-kind.sh
 ```
 
 - Setup Istio, Kiali, and Prometheus:
@@ -61,7 +70,8 @@ To set up the `httpbin` service in a local Kubernetes cluster using Kind, follow
 - Generate some traffic to httpbin:
 
 ```bash
-for i in {1..10}; do curl -s -D - -o /dev/null http://httpbin.local/status/200; done
+export INGRESS_IP=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+for i in {1..10}; do curl -s -D - -o /dev/null -H "Host: httpbin.local" http://$INGRESS_IP/status/200; sleep 1; done
 ```
 
 ## Setup
@@ -82,6 +92,8 @@ go build -o okresilience ./cmd/okresilience
 
 ### Validate upstream 5xx failures with retries
 
+With this test you can validate that the gateway retries requests when upstream services return 5xx errors.
+
 ```bash
 ./okresilience upstream5xxFailures \
     --prometheus-url=http://prometheus.local \
@@ -95,11 +107,13 @@ go build -o okresilience ./cmd/okresilience
 
 ### Validate upstream TCP resets
 
+With this test you can validate that the gateway retries requests when TCP resets occur in upstream services.
+
 ```bash
 ./okresilience upstreamTcpReset \
     --prometheus-url=http://prometheus.local \
     --service-endpoint=http://tcp-reset-service.local/ \
-    --namespace=tcp-reset-demo \
+    --namespace=tcp-ns \
     --virtual-service=tcp-reset-vs \
     --num-requests=1 \
     --response-code=503 \
