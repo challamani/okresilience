@@ -19,26 +19,6 @@ jobs:
       SCRIPTS_DIR: scripts
       DEMO_NS: demo
       DEMO_TCP_NS: tcp-ns
-    # strategy:
-    #   fail-fast: false
-    #   matrix:
-    #     k8s-version:
-    #     - v1.34.0
-    #     - v1.33.4
-    #     - v1.32.8
-    #     mode:
-    #     - ha
-    #     - non-ha
-    #     include:
-    #     - k8s-version: v1.34.0
-    #       kind-version: v0.30.0
-    #       kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
-    #     - k8s-version: v1.33.4
-    #       kind-version: v0.30.0
-    #       kind-image-sha: sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
-    #     - k8s-version: v1.32.8
-    #       kind-version: v0.30.0
-    #       kind-image-sha: sha256:abd489f042d2b644e2d033f5c2d900bc707798d075e8186cb65e3f1367a9d5a1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -50,7 +30,7 @@ jobs:
         with:
           go-version-file: 'go.mod' # use a valid Go version that matches go.mod (format '1.23')
 
-      - name: Build
+      - name: Build okresilience CLI
         run: go build -o okresilience ./cmd/okresilience
 
       - name: Test
@@ -68,17 +48,13 @@ jobs:
       #     kind: Cluster
       #     nodes:
       #     - role: control-plane
-      #       image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+      #       image: kindest/node:v1.33.4
       #     - role: worker
-      #       image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+      #       image: kindest/node:v1.33.4
       #     - role: worker
-      #       image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+      #       image: kindest/node:v1.33.4
       #     - role: worker
-      #       image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
-      #     containerdConfigPatches:
-      #     - |-
-      #       [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:$REGISTRY_PORT"]
-      #         endpoint = ["http://$REGISTRY_NAME:$REGISTRY_PORT"]
+      #       image: kindest/node:v1.33.4
       #     EOF
       #     # Log the generated kind.yaml for easy reference.
       #     cat kind.yaml
@@ -113,6 +89,17 @@ jobs:
 
           ls -la "${{ env.SCRIPTS_DIR }}" || true
           chmod +x "${{ env.SCRIPTS_DIR }}"/*.sh || true
+
+      - name: Download and install istioctl
+        run: |
+          set -eux
+          curl -sL https://istio.io/downloadIstio | sh -
+          ISTIO_DIR=$(find . -maxdepth 1 -type d -name "istio-*" | head -n 1)
+          echo "Istio directory: $ISTIO_DIR"
+          echo "$ISTIO_DIR/bin" >> $GITHUB_PATH
+
+      - name: Verify istioctl installation
+        run: istioctl --help
 
       - name: Deploy Istio with demo addons (Prometheus)
         run: |
