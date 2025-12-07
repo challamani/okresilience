@@ -30,22 +30,25 @@ jobs:
           echo "GITHUB_WORKSPACE = $GITHUB_WORKSPACE"
           echo "Resources available at: $GITHUB_WORKSPACE/${{ env.RESOURCES_DIR }}"
 
-      - name: Install kind CLI
-        uses: engineerd/setup-kind@v0.5.0
+      - name: Create k8s Kind Cluster with Cloud Provider
+        uses: helm/kind-action@v1
         with:
-          version: v0.20.0
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          wait: 120s
+          kubectl_version: 'latest'
+          cloud_provider: true
 
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: '1.28.2'
+      # - name: Install kubectl
+      #   uses: azure/setup-kubectl@v4
+      #   with:
+      #     version: 'latest'
 
-      - name: Create kind cluster
-        run: |
-          set -eux
-          kind create cluster --name "${{ env.KIND_CLUSTER_NAME }}" --wait 60s
-          kubectl cluster-info
-          kubectl get nodes -o wide
+      # - name: Create kind cluster
+      #   run: |
+      #     set -eux
+      #     kind create cluster --name "${{ env.KIND_CLUSTER_NAME }}" --wait 60s
+      #     kubectl cluster-info
+      #     kubectl get nodes -o wide
 
       - name: Make resource scripts executable
         run: |
