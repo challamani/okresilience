@@ -1,4 +1,6 @@
 # CI: run tests in kind and create a release on success
+name: okresilience-ci-release
+
 on:
   push:
     tags:
