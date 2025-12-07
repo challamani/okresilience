@@ -19,24 +19,78 @@ jobs:
       SCRIPTS_DIR: scripts
       DEMO_NS: demo
       DEMO_TCP_NS: tcp-ns
+    # strategy:
+    #   fail-fast: false
+    #   matrix:
+    #     k8s-version:
+    #     - v1.34.0
+    #     - v1.33.4
+    #     - v1.32.8
+    #     mode:
+    #     - ha
+    #     - non-ha
+    #     include:
+    #     - k8s-version: v1.34.0
+    #       kind-version: v0.30.0
+    #       kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
+    #     - k8s-version: v1.33.4
+    #       kind-version: v0.30.0
+    #       kind-image-sha: sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
+    #     - k8s-version: v1.32.8
+    #       kind-version: v0.30.0
+    #       kind-image-sha: sha256:abd489f042d2b644e2d033f5c2d900bc707798d075e8186cb65e3f1367a9d5a1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod' # use a valid Go version that matches go.mod (format '1.23')
+
+      - name: Build
+        run: go build -o okresilience ./cmd/okresilience
+
+      - name: Test
+        run: go test -v ./...
 
       - name: Show resources path
         run: |
           echo "GITHUB_WORKSPACE = $GITHUB_WORKSPACE"
           echo "Resources available at: $GITHUB_WORKSPACE/${{ env.RESOURCES_DIR }}"
+      
+      # - name: Configure KinD
+      #   run: |
+      #     cat > kind.yaml <<EOF
+      #     apiVersion: kind.x-k8s.io/v1alpha4
+      #     kind: Cluster
+      #     nodes:
+      #     - role: control-plane
+      #       image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+      #     - role: worker
+      #       image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+      #     - role: worker
+      #       image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+      #     - role: worker
+      #       image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+      #     containerdConfigPatches:
+      #     - |-
+      #       [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:$REGISTRY_PORT"]
+      #         endpoint = ["http://$REGISTRY_NAME:$REGISTRY_PORT"]
+      #     EOF
+      #     # Log the generated kind.yaml for easy reference.
+      #     cat kind.yaml
 
       - name: Create k8s Kind Cluster with Cloud Provider
         uses: helm/kind-action@v1.13.0
         with:
           cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           wait: 120s
-          kubectl_version: 'latest'
           cloud_provider: true
+          version: 'v0.30.0'
+          kubectl_version: 'v1.33.4'
 
       # - name: Install kubectl
       #   uses: azure/setup-kubectl@v4
@@ -75,17 +129,6 @@ jobs:
             kubectl -n "${{ env.DEMO_NS }}" wait --for=condition=available --all deployment --timeout=120s || true
             kubectl -n "${{ env.DEMO_NS }}" get pods -o wide
           fi
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.23.x' # use a valid Go version that matches go.mod (format '1.23')
-
-      - name: Build
-        run: go build -o okresilience ./cmd/okresilience
-
-      - name: Test
-        run: go test -v ./...
 
       - name: Run tests
         # This step should run the tests you maintain. It's up to your repo to provide scripts that assert expected behavior.
