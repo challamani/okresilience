@@ -31,7 +31,7 @@ jobs:
           echo "Resources available at: $GITHUB_WORKSPACE/${{ env.RESOURCES_DIR }}"
 
       - name: Create k8s Kind Cluster with Cloud Provider
-        uses: helm/kind-action@v1
+        uses: helm/kind-action@v1.13.0
         with:
           cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           wait: 120s
