@@ -12,7 +12,6 @@ This service listens on port 80 and forcibly closes every incoming connection, c
 
 This is useful for testing:
 
-
 - Application resilience to TCP-level failures
 - Circuit breakers and retry logic
 - Client-side error handling
@@ -24,16 +23,16 @@ This is useful for testing:
 
 ```zsh
 # Build the Docker image
-docker build -t tcp-reset-service:local resources/tcp-reset-service
+docker build -t tcp-reset-service:local resources/tcp-reset
 
 # If using kind, load into cluster
 kind load docker-image tcp-reset-service:local --name ok-resilience
 
 # Deploy to Kubernetes
-kubectl apply -f resources/tcp-reset-service/deployment.yaml
+kubectl apply -f resources/tcp-reset/deployment.yaml
 
 # Verify pod is running
-kubectl -n demo get pods -l app=tcp-reset-service
+kubectl -n tcp-ns get pods -l app=tcp-reset-service
 ```
 
 ### Route Traffic

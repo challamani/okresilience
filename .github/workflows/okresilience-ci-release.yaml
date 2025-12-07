@@ -28,12 +28,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod' # use a valid Go version that matches go.mod (format '1.23')
+          go-version-file: 'go.mod'
 
       - name: Build okresilience CLI
         run: go build -o okresilience ./cmd/okresilience
 
-      - name: Test
+      - name: Run Unit Tests
         run: go test -v ./...
 
       - name: Show resources path
@@ -68,25 +68,10 @@ jobs:
           version: 'v0.30.0'
           kubectl_version: 'v1.33.4'
 
-      # - name: Install kubectl
-      #   uses: azure/setup-kubectl@v4
-      #   with:
-      #     version: 'latest'
-
-      # - name: Create kind cluster
-      #   run: |
-      #     set -eux
-      #     kind create cluster --name "${{ env.KIND_CLUSTER_NAME }}" --wait 60s
-      #     kubectl cluster-info
-      #     kubectl get nodes -o wide
-
       - name: Make resource scripts executable
         run: |
           set -eux
-          # Make scripts in resources and scripts dir executable
-          ls -la "${{ env.RESOURCES_DIR }}" || true
-          chmod +x "${{ env.RESOURCES_DIR }}"/**/*.sh || true
-
+          # Make scripts executable
           ls -la "${{ env.SCRIPTS_DIR }}" || true
           chmod +x "${{ env.SCRIPTS_DIR }}"/*.sh || true
 
@@ -108,7 +93,7 @@ jobs:
           kubectl -n istio-system wait --for=condition=available --all deployment --timeout=120s || true
           kubectl -n istio-system get pods -o wide
 
-      - name: Deploy demo services (httpbin) from resources
+      - name: Deploy test services (httpbin and tcp-reset) from resources
         run: |
           set -eux
           if [ -d "${{ env.RESOURCES_DIR }}/httpbin" ]; then
@@ -116,19 +101,17 @@ jobs:
             kubectl -n "${{ env.DEMO_NS }}" wait --for=condition=available --all deployment --timeout=120s || true
             kubectl -n "${{ env.DEMO_NS }}" get pods -o wide
           fi
+          if [ -d "${{ env.RESOURCES_DIR }}/tcp-reset" ]; then
+            bash "${{ env.SCRIPTS_DIR}}/deploy-tcp-reset.sh"
+            kubectl -n "${{ env.DEMO_TCP_NS }}" wait --for=condition=available --all deployment --timeout=120s || true
+            kubectl -n "${{ env.DEMO_TCP_NS }}" get pods -o wide
+          fi
 
-      - name: Run tests
+      - name: Run integration tests
         # This step should run the tests you maintain. It's up to your repo to provide scripts that assert expected behavior.
         run: |
           set -eux
-          ./okresilience upstream5xxFailures \
-          --prometheus-url=http://prometheus.local \
-          --service-endpoint=http://httpbin.local/status/500 \
-          --namespace=${{ env.DEMO_NS }} \
-          --virtual-service=httpbin-vs \
-          --num-requests=1 \
-          --response-code=500 \
-          --app=httpbin
+          bash "${{ env.SCRIPTS_DIR }}/integration-tests.sh"
 
       - name: Create GitHub Release (only on tagged push)
         if: startsWith(github.ref, 'refs/tags/')
@@ -148,7 +131,7 @@ jobs:
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./bin/okresilience
+          asset_path: ./okresilience
           asset_name: okresilience-linux-amd64
           asset_content_type: application/octet-stream
         env:
@@ -159,7 +142,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: okresilience-cli
-          path: ./bin/okresilience
+          path: ./okresilience
 
       - name: Teardown demo resources & kind (always)
         if: always()

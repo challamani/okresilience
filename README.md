@@ -28,6 +28,7 @@ Ensure the following tools are installed on your system:
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - [istioctl](https://istio.io/latest/docs/setup/getting-started/)
 - [kind](https://kind.sigs.k8s.io/)
+- [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind)
 
 ### Install Prerequisites
 
@@ -38,6 +39,7 @@ brew install go
 brew install kubectl
 brew install istioctl
 brew install kind
+brew install cloud-provider-kind
 ```
 
 For other platforms, refer to the official installation guides for each tool.
@@ -61,7 +63,7 @@ To set up the `httpbin` service in a local Kubernetes cluster using Kind, follow
 ./scripts/install-istio.sh
 ```
 
-- Deploy httpbin application:
+- Deploy `httpbin` application:
 
 ```bash
 ./scripts/deploy-httpbin.sh
@@ -71,7 +73,10 @@ To set up the `httpbin` service in a local Kubernetes cluster using Kind, follow
 
 ```bash
 export INGRESS_IP=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-for i in {1..10}; do curl -s -D - -o /dev/null -H "Host: httpbin.local" http://$INGRESS_IP/status/200; sleep 1; done
+for i in {1..50}; do echo -e "\nRequest ==> [$i]"; curl -s -D - -o /dev/null -H "Host: httpbin.local" http://$INGRESS_IP/get; sleep 1; done
+
+# use generate traffic script
+./scripts/generate-traffic.sh
 ```
 
 ## Setup
@@ -128,8 +133,8 @@ go test ./... -v
 
 ## TCP Failure Simulation
 
-Deploy the tcp-reset-service for testing TCP failures:
+Deploy the `tcp-reset-service` for testing TCP failures:
 
 ```bash
-./scripts/deploy-tcp-reset-service.sh
+./scripts/deploy-tcp-reset.sh
 ```

@@ -15,9 +15,11 @@ print_success() {
 # Function to clean up Kubernetes resources
 cleanup_kubernetes_resources() {
   echo "Cleaning up Kubernetes resources..."
+  kubectl delete -f resources/httpbin/gateway.yaml || echo "Kubernetes resources not found or already deleted."
   kubectl delete -f resources/httpbin/deployment.yaml || echo "Kubernetes resources not found or already deleted."
   print_success "httpbin resources cleaned up"
-  kubectl delete -f resources/tcp-reset-service/deployment.yaml || echo "Kubernetes resources not found or already deleted."
+  kubectl delete -f resources/tcp-reset/gateway.yaml || echo "Kubernetes resources not found or already deleted."
+  kubectl delete -f resources/tcp-reset/deployment.yaml || echo "Kubernetes resources not found or already deleted."
   print_success "TCP reset service resources cleaned up"
 }
 
