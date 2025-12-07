@@ -68,7 +68,7 @@ func main() {
 				actualRequests := afterRequests - beforeRequests
 				expectedRequests := numRequests * (retries + 1)
 				if actualRequests == expectedRequests {
-					fmt.Printf("%sResilience validation completed successfully.%s\n", colorGreen, colorReset)
+					fmt.Printf("%sUpstream5xxFailures: Resilience validation completed successfully.%s\n", colorGreen, colorReset)
 					return
 				}
 
@@ -123,7 +123,7 @@ func main() {
 				expectedDest := numRequests * (retries + 1)
 
 				if actualDest == expectedDest {
-					fmt.Printf("%sTCP upstream failure validation succeeded.%s\n", colorGreen, colorReset)
+					fmt.Printf("%sUpstreamTcpReset: TCP upstream failure validation succeeded.%s\n", colorGreen, colorReset)
 					return
 				}
 				log.Printf("Dest TCP validation failed (attempt %d): expected %d closed, got %d", attempt, expectedDest, actualDest)

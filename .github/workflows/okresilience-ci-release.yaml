@@ -1,0 +1,138 @@
+# CI: run tests in kind and create a release on success
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-and-release:
+    runs-on: ubuntu-latest
+    env:
+      KIND_CLUSTER_NAME: ok-resilience
+      RESOURCES_DIR: resources
+      SCRIPTS_DIR: scripts
+      DEMO_NS: demo
+      DEMO_TCP_NS: tcp-ns
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Show resources path
+        run: |
+          echo "GITHUB_WORKSPACE = $GITHUB_WORKSPACE"
+          echo "Resources available at: $GITHUB_WORKSPACE/${{ env.RESOURCES_DIR }}"
+
+      - name: Install kind CLI
+        uses: engineerd/setup-kind@v0.5.0
+        with:
+          version: v0.20.0
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: '1.28.2'
+
+      - name: Create kind cluster
+        run: |
+          set -eux
+          kind create cluster --name "${{ env.KIND_CLUSTER_NAME }}" --wait 60s
+          kubectl cluster-info
+          kubectl get nodes -o wide
+
+      - name: Make resource scripts executable
+        run: |
+          set -eux
+          # Make scripts in resources and scripts dir executable
+          ls -la "${{ env.RESOURCES_DIR }}" || true
+          chmod +x "${{ env.RESOURCES_DIR }}"/**/*.sh || true
+
+          ls -la "${{ env.SCRIPTS_DIR }}" || true
+          chmod +x "${{ env.SCRIPTS_DIR }}"/*.sh || true
+
+      - name: Deploy Istio with demo addons (Prometheus)
+        run: |
+          set -eux
+          ${{ env.SCRIPTS_DIR }}/install-istio.sh
+          kubectl -n istio-system wait --for=condition=available --all deployment --timeout=120s || true
+          kubectl -n istio-system get pods -o wide
+
+      - name: Deploy demo services (httpbin) from resources
+        run: |
+          set -eux
+          if [ -d "${{ env.RESOURCES_DIR }}/httpbin" ]; then
+            bash "${{ env.SCRIPTS_DIR}}/deploy-httpbin.sh"
+            kubectl -n "${{ env.DEMO_NS }}" wait --for=condition=available --all deployment --timeout=120s || true
+            kubectl -n "${{ env.DEMO_NS }}" get pods -o wide
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23.x' # use a valid Go version that matches go.mod (format '1.23')
+
+      - name: Build
+        run: go build -o okresilience ./cmd/okresilience
+
+      - name: Test
+        run: go test -v ./...
+
+      - name: Run tests
+        # This step should run the tests you maintain. It's up to your repo to provide scripts that assert expected behavior.
+        run: |
+          set -eux
+          ./okresilience upstream5xxFailures \
+          --prometheus-url=http://prometheus.local \
+          --service-endpoint=http://httpbin.local/status/500 \
+          --namespace=${{ env.DEMO_NS }} \
+          --virtual-service=httpbin-vs \
+          --num-requests=1 \
+          --response-code=500 \
+          --app=httpbin
+
+      - name: Create GitHub Release (only on tagged push)
+        if: startsWith(github.ref, 'refs/tags/')
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: "okresilience ${{ github.ref_name }}"
+          body: "Automated release for ${{ github.ref_name }} from CI run ${{ github.run_id }}"
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload CLI to Release
+        if: startsWith(github.ref, 'refs/tags/') && success()
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/okresilience
+          asset_name: okresilience-linux-amd64
+          asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload CLI as workflow artifact (fallback)
+        if: success() && !startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: okresilience-cli
+          path: ./bin/okresilience
+
+      - name: Teardown demo resources & kind (always)
+        if: always()
+        run: |
+          set -eux
+          # If you provide a teardown script (recommended)
+          if [ -x "${{ env.SCRIPTS_DIR }}/cleanup.sh" ]; then
+            bash "${{ env.SCRIPTS_DIR }}/cleanup.sh"
+          fi
+          kind delete cluster --name "${{ env.KIND_CLUSTER_NAME }}"
+          
