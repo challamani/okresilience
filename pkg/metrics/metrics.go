@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	istioClient "istio.io/client-go/pkg/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -170,6 +171,45 @@ func GetRetriesConfiguration(namespace, serviceName string) (int, error) {
 	}
 
 	return int(vs.Spec.Http[0].Retries.Attempts), nil
+}
+
+// GetTimeoutConfiguration returns the HTTP route timeout and per-try timeout durations from a VirtualService.
+func GetTimeoutConfiguration(namespace, serviceName string) (time.Duration, time.Duration, error) {
+	config, err := getKubernetesConfig()
+	if err != nil {
+		return 0, 0, fmt.Errorf("error creating Kubernetes config: %v", err)
+	}
+
+	istioClientset, err := istioClient.NewForConfig(config)
+	if err != nil {
+		return 0, 0, fmt.Errorf("error creating Istio client: %v", err)
+	}
+
+	vs, err := istioClientset.NetworkingV1alpha3().VirtualServices(namespace).Get(context.TODO(), serviceName, metav1.GetOptions{})
+	if err != nil {
+		return 0, 0, fmt.Errorf("error fetching VirtualService: %v", err)
+	}
+
+	if len(vs.Spec.Http) == 0 {
+		return 0, 0, fmt.Errorf("no HTTP routes found in VirtualService")
+	}
+
+	route := vs.Spec.Http[0]
+	if route.Timeout == nil {
+		return 0, 0, fmt.Errorf("timeout not configured in VirtualService")
+	}
+
+	timeout := route.Timeout.AsDuration()
+	if route.Retries == nil || route.Retries.PerTryTimeout == nil {
+		return timeout, 0, fmt.Errorf("perTryTimeout not configured in VirtualService")
+	}
+
+	perTryTimeout := route.Retries.PerTryTimeout.AsDuration()
+	if perTryTimeout == 0 {
+		return timeout, 0, fmt.Errorf("perTryTimeout is zero in VirtualService")
+	}
+
+	return timeout, perTryTimeout, nil
 }
 
 // getKubernetesConfig is a variable that holds a function to fetch Kubernetes configuration.

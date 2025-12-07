@@ -30,9 +30,9 @@ spec:
           prefix: /
       retries:
         attempts: 3
-        perTryTimeout: 5s
+        perTryTimeout: 2s
         retryOn: "5xx,gateway-error,connect-failure,refused-stream,reset"
-      timeout: 20s
+      timeout: 6s
       route:
       - destination:
           host: httpbin.demo.svc.cluster.local

@@ -76,7 +76,12 @@ export INGRESS_IP=$(kubectl -n istio-system get service istio-ingressgateway -o 
 for i in {1..50}; do echo -e "\nRequest ==> [$i]"; curl -s -D - -o /dev/null -H "Host: httpbin.local" http://$INGRESS_IP/get; sleep 1; done
 
 # use generate traffic script
-./scripts/generate-traffic.sh
+./scripts/generate-traffic.sh            # defaults to status endpoint
+./scripts/generate-traffic.sh header     # hit /get to echo headers
+./scripts/generate-traffic.sh delay      # hit /delay/5 to simulate slow upstreams
+
+REQUEST_COUNT=10
+./scripts/generate-traffic.sh status  # override request volume
 ```
 
 ## Setup
@@ -124,6 +129,25 @@ With this test you can validate that the gateway retries requests when TCP reset
     --response-code=503 \
     --source-app=istio-ingressgateway
 ```
+
+### Validate Gateway timeout behavior
+
+Use this to verify that ingress timeouts surface as upstream `responseCode=0` while clients observe HTTP 504. The upstream diff should equal `num-requests * (timeout / perTryTimeout)` as configured in the VirtualService.
+
+```bash
+./okresilience gatewayTimeoutVerify \
+    --prometheus-url=http://prometheus.local \
+    --service-endpoint=http://httpbin.local/delay/3 \
+    --namespace=demo \
+    --virtual-service=httpbin-vs \
+    --num-requests=1 \
+    --app=httpbin
+```
+
+Expected:
+
+- Upstream metrics with `responseCode=0` increase by `num-requests * (timeout / perTryTimeout)`
+- All downstream responses are HTTP 504 (Gateway Timeout)
 
 ## Running Unit Tests
 

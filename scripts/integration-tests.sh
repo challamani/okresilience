@@ -13,22 +13,30 @@ print_msg() {
 }
 
 print_msg "Running resilience test for upstream 5xx failures..."
-
 ./okresilience upstream5xxFailures \
-  --prometheus-url=http://prometheus.local \
-  --service-endpoint=http://httpbin.local/status/500 \
-  --namespace=demo \
-  --virtual-service=httpbin-vs \
-  --num-requests=1 \
-  --response-code=500 \
-  --app=httpbin
+    --prometheus-url=http://prometheus.local \
+    --service-endpoint=http://httpbin.local/status/500 \
+    --namespace=demo \
+    --virtual-service=httpbin-vs \
+    --num-requests=1 \
+    --response-code=500 \
+    --app=httpbin
 
 print_msg "Running resilience test for upstream TCP resets..."
 ./okresilience upstreamTcpReset \
-  --prometheus-url=http://prometheus.local \
-  --service-endpoint=http://tcp-reset-service.local/ \
-  --namespace=tcp-ns \
-  --virtual-service=tcp-reset-vs \
-  --num-requests=1 \
-  --response-code=503 \
-  --source-app=istio-ingressgateway
+    --prometheus-url=http://prometheus.local \
+    --service-endpoint=http://tcp-reset-service.local/ \
+    --namespace=tcp-ns \
+    --virtual-service=tcp-reset-vs \
+    --num-requests=1 \
+    --response-code=503 \
+    --source-app=istio-ingressgateway
+
+print_msg "Running resilience test for gateway timeout verification..."
+./okresilience gatewayTimeoutVerify \
+    --prometheus-url=http://prometheus.local \
+    --service-endpoint=http://httpbin.local/delay/3 \
+    --namespace=demo \
+    --virtual-service=httpbin-vs \
+    --num-requests=1 \
+    --app=httpbin

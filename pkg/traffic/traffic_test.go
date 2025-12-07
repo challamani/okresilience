@@ -50,7 +50,7 @@ func TestGenerateTraffic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call GenerateTraffic
-			err := GenerateTraffic(tt.gatewayURL, tt.namespace, tt.serviceName, tt.numRequests)
+			_, err := GenerateTraffic(tt.gatewayURL, tt.namespace, tt.serviceName, tt.numRequests)
 
 			// Check if an error was expected
 			if (err != nil) != tt.expectError {

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/challamani/okresilience/pkg/metrics"
@@ -45,7 +46,7 @@ func main() {
 			log.Printf("Metrics before traffic generation: %d requests", beforeRequests)
 
 			// Generate test traffic
-			err = traffic.GenerateTraffic(serviceEndpoint, namespace, virtualService, numRequests)
+			_, err = traffic.GenerateTraffic(serviceEndpoint, namespace, virtualService, numRequests)
 			if err != nil {
 				log.Fatalf("Error generating traffic: %v", err)
 			}
@@ -101,7 +102,8 @@ func main() {
 			log.Printf("TCP closed (dest) before: %d", beforeClosed)
 
 			// Generate test traffic
-			if err := traffic.GenerateTraffic(serviceEndpoint, namespace, virtualService, numRequests); err != nil {
+			_, err = traffic.GenerateTraffic(serviceEndpoint, namespace, virtualService, numRequests)
+			if err != nil {
 				log.Fatalf("Error generating traffic: %v", err)
 			}
 			log.Printf("Traffic generation completed for service %s in namespace %s", virtualService, namespace)
@@ -146,9 +148,68 @@ func main() {
 	// Add source app flag for TCP validation
 	rootCmd.PersistentFlags().StringVar(&sourceApp, "source-app", "", "Source application name for TCP metrics query (optional)")
 
+	// gatewayTimeoutVerify subcommand
+	gatewayTimeoutVerifyCmd := &cobra.Command{
+		Use:   "gatewayTimeoutVerify",
+		Short: "Verify Gateway timeout scenario (responseCode=0, downstream 504)",
+		Run: func(cmd *cobra.Command, args []string) {
+			// Fetch timeout and per-try timeout configuration
+			timeout, perTryTimeout, err := metrics.GetTimeoutConfiguration(namespace, virtualService)
+			if err != nil {
+				log.Fatalf("Error fetching timeout configuration: %v", err)
+			}
+
+			// Query upstream metrics (responseCode=0) before traffic
+			beforeTest, err := metrics.QueryMetrics(prometheusURL, app, namespace, "0")
+			if err != nil {
+				log.Fatalf("Error querying upstream metrics (responseCode=0) before: %v", err)
+			}
+			log.Printf("Upstream metrics (responseCode=0) before: %d", beforeTest)
+
+			// Generate traffic and collect downstream response codes using traffic.GenerateTraffic
+			downstreamCodes, err := traffic.GenerateTraffic(serviceEndpoint, namespace, virtualService, numRequests)
+			if err != nil {
+				log.Printf("Error generating traffic: %v", err)
+			}
+			num504 := 0
+			for i, code := range downstreamCodes {
+				log.Printf("Request %d: downstream status %d", i+1, code)
+				if code == 504 {
+					num504++
+				}
+			}
+			log.Printf("Total downstream 504 responses: %d", num504)
+
+			// Retry loop for upstream metrics
+			var afterTest int
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				log.Printf("Waiting %d seconds for upstream metrics to sync (attempt %d/%d)...", delaySeconds, attempt, maxRetries)
+				time.Sleep(time.Duration(delaySeconds) * time.Second)
+
+				afterTest, err = metrics.QueryMetrics(prometheusURL, app, namespace, "0")
+				if err != nil {
+					log.Printf("Error querying upstream metrics (responseCode=0) after (attempt %d): %v", attempt, err)
+					continue
+				}
+				log.Printf("Upstream metrics (responseCode=0) after (attempt %d): %d", attempt, afterTest)
+
+				actual := afterTest - beforeTest
+				ratio := timeout.Seconds() / perTryTimeout.Seconds()
+				expected := int(math.Round(float64(numRequests) * ratio))
+				if actual == expected && num504 == numRequests {
+					fmt.Printf("%sGatewayTimeoutVerify: Validation succeeded. Upstream responseCode=0 diff: %d, downstream 504s: %d%s\n", colorGreen, actual, num504, colorReset)
+					return
+				}
+				log.Printf("Validation failed (attempt %d): expected upstream diff %d, got %d; downstream 504s: %d/%d (timeout=%.2fs, perTryTimeout=%.2fs)", attempt, expected, actual, num504, numRequests, timeout.Seconds(), perTryTimeout.Seconds())
+			}
+			fmt.Printf("%sGatewayTimeoutVerify: Validation failed after %d attempts.%s\n", colorRed, maxRetries, colorReset)
+		},
+	}
+
 	// Add subcommands at the end for readability
 	rootCmd.AddCommand(upstream5xxFailuresCmd)
 	rootCmd.AddCommand(upstreamTcpResetCmd)
+	rootCmd.AddCommand(gatewayTimeoutVerifyCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalf("Error executing command: %v", err)
