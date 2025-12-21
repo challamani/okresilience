@@ -8,7 +8,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-func TestQueryMetrics(t *testing.T) {
+func TestQueryIstioRequestsTotal(t *testing.T) {
 	// Mock Prometheus server
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query().Get("query")
@@ -76,14 +76,54 @@ func TestQueryMetrics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := QueryMetrics(tt.prometheusURL, tt.app, tt.namespace, tt.responseCode)
+			result, err := QueryIstioRequestsTotal(tt.prometheusURL, map[string]string{
+				"destination_app": tt.app,
+				"namespace":       tt.namespace,
+				"response_code":   tt.responseCode,
+			})
 			if (err != nil) != tt.expectError {
-				t.Errorf("QueryMetrics() error = %v, expectError %v", err, tt.expectError)
+				t.Errorf("QueryIstioRequestsTotal() error = %v, expectError %v", err, tt.expectError)
 			}
 			if result != tt.expected {
-				t.Errorf("QueryMetrics() = %v, expected %v", result, tt.expected)
+				t.Errorf("QueryIstioRequestsTotal() = %v, expected %v", result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestQueryIstioTcpConnectionsClosedTotal(t *testing.T) {
+	// Mock Prometheus server
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query().Get("query")
+		if query == `istio_tcp_connections_closed_total{namespace="demo",response_flags="UF,URX"}` {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{
+					"data": {
+						"result": [
+							{
+								"metric": {"response_flags": "UF"},
+								"value": [1680000000, "5.0"]
+							}
+						]
+					}
+				}`))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"data":{"result":[]}}`))
+	}))
+	defer mockServer.Close()
+
+	result, err := QueryIstioTcpConnectionsClosedTotal(mockServer.URL, map[string]string{
+		"namespace":      "demo",
+		"response_flags": "UF,URX",
+	})
+	if err != nil {
+		t.Fatalf("QueryIstioTcpConnectionsClosedTotal() unexpected error: %v", err)
+	}
+	if result != 5 {
+		t.Fatalf("QueryIstioTcpConnectionsClosedTotal() = %d, expected 5", result)
 	}
 }
 

@@ -39,7 +39,11 @@ func main() {
 			}
 
 			// Query metrics before traffic generation
-			beforeRequests, err := metrics.QueryMetrics(prometheusURL, app, namespace, responseCode)
+			beforeRequests, err := metrics.QueryIstioRequestsTotal(prometheusURL, map[string]string{
+				"destination_app": app,
+				"namespace":       namespace,
+				"response_code":   responseCode,
+			})
 			if err != nil {
 				log.Fatalf("Error querying metrics before traffic generation: %v", err)
 			}
@@ -58,7 +62,11 @@ func main() {
 				log.Printf("Waiting %d seconds for metrics to sync (attempt %d/%d)...", delaySeconds, attempt, maxRetries)
 				time.Sleep(time.Duration(delaySeconds) * time.Second)
 
-				afterRequests, err = metrics.QueryMetrics(prometheusURL, app, namespace, responseCode)
+				afterRequests, err = metrics.QueryIstioRequestsTotal(prometheusURL, map[string]string{
+					"destination_app": app,
+					"namespace":       namespace,
+					"response_code":   responseCode,
+				})
 				if err != nil {
 					log.Printf("Error querying metrics after traffic generation (attempt %d): %v", attempt, err)
 					continue
@@ -81,8 +89,6 @@ func main() {
 		},
 	}
 
-	// (subcommands defined above)
-
 	// upstreamTcpReset subcommand validates TCP upstream failures via destination tcp closed metrics
 	upstreamTcpResetCmd := &cobra.Command{
 		Use:   "upstreamTcpReset",
@@ -95,7 +101,15 @@ func main() {
 			}
 
 			// Query destination TCP closed metrics before
-			beforeClosed, err := metrics.QueryTcpClosedDest(prometheusURL, namespace, "UF,URX")
+			closedLabels := map[string]string{
+				"namespace":      namespace,
+				"response_flags": "UF,URX",
+			}
+			if sourceApp != "" {
+				closedLabels["source_app"] = sourceApp
+			}
+
+			beforeClosed, err := metrics.QueryIstioTcpConnectionsClosedTotal(prometheusURL, closedLabels)
 			if err != nil {
 				log.Fatalf("Error querying TCP closed metrics before: %v", err)
 			}
@@ -114,7 +128,7 @@ func main() {
 				log.Printf("Waiting %d seconds for TCP metrics to sync (attempt %d/%d)...", delaySeconds, attempt, maxRetries)
 				time.Sleep(time.Duration(delaySeconds) * time.Second)
 
-				afterClosed, err = metrics.QueryTcpClosedDest(prometheusURL, namespace, "UF,URX")
+				afterClosed, err = metrics.QueryIstioTcpConnectionsClosedTotal(prometheusURL, closedLabels)
 				if err != nil {
 					log.Printf("Error querying TCP closed metrics after (attempt %d): %v", attempt, err)
 					continue
@@ -135,19 +149,6 @@ func main() {
 		},
 	}
 
-	// Shared flags for all subcommands via root persistent flags
-	rootCmd.PersistentFlags().StringVar(&prometheusURL, "prometheus-url", "", "Prometheus server URL")
-	rootCmd.PersistentFlags().StringVar(&serviceEndpoint, "service-endpoint", "", "Service endpoint URL")
-	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "default", "Kubernetes namespace")
-	rootCmd.PersistentFlags().StringVar(&virtualService, "virtual-service", "", "Name of the VirtualService resource")
-	rootCmd.PersistentFlags().StringVar(&responseCode, "response-code", "200", "Expected HTTP response code for metrics validation")
-	rootCmd.PersistentFlags().StringVar(&app, "app", "", "Destination application name for metrics query")
-	rootCmd.PersistentFlags().IntVar(&numRequests, "num-requests", 10, "Number of requests to send to the service endpoint")
-	rootCmd.PersistentFlags().IntVar(&delaySeconds, "delay-seconds", 5, "Delay in seconds to wait for metrics to sync")
-	rootCmd.PersistentFlags().IntVar(&maxRetries, "max-retries", 5, "Maximum number of retries to fetch metrics after traffic generation")
-	// Add source app flag for TCP validation
-	rootCmd.PersistentFlags().StringVar(&sourceApp, "source-app", "", "Source application name for TCP metrics query (optional)")
-
 	// gatewayTimeoutVerify subcommand
 	gatewayTimeoutVerifyCmd := &cobra.Command{
 		Use:   "gatewayTimeoutVerify",
@@ -160,7 +161,11 @@ func main() {
 			}
 
 			// Query upstream metrics (responseCode=0) before traffic
-			beforeTest, err := metrics.QueryMetrics(prometheusURL, app, namespace, "0")
+			beforeTest, err := metrics.QueryIstioRequestsTotal(prometheusURL, map[string]string{
+				"destination_app": app,
+				"namespace":       namespace,
+				"response_code":   "0",
+			})
 			if err != nil {
 				log.Fatalf("Error querying upstream metrics (responseCode=0) before: %v", err)
 			}
@@ -186,7 +191,11 @@ func main() {
 				log.Printf("Waiting %d seconds for upstream metrics to sync (attempt %d/%d)...", delaySeconds, attempt, maxRetries)
 				time.Sleep(time.Duration(delaySeconds) * time.Second)
 
-				afterTest, err = metrics.QueryMetrics(prometheusURL, app, namespace, "0")
+				afterTest, err = metrics.QueryIstioRequestsTotal(prometheusURL, map[string]string{
+					"destination_app": app,
+					"namespace":       namespace,
+					"response_code":   "0",
+				})
 				if err != nil {
 					log.Printf("Error querying upstream metrics (responseCode=0) after (attempt %d): %v", attempt, err)
 					continue
@@ -205,6 +214,20 @@ func main() {
 			fmt.Printf("%sGatewayTimeoutVerify: Validation failed after %d attempts.%s\n", colorRed, maxRetries, colorReset)
 		},
 	}
+
+	// (subcommands defined above)
+	// Shared flags for all subcommands via root persistent flags
+	rootCmd.PersistentFlags().StringVar(&prometheusURL, "prometheus-url", "", "Prometheus server URL")
+	rootCmd.PersistentFlags().StringVar(&serviceEndpoint, "service-endpoint", "", "Service endpoint URL")
+	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "default", "Kubernetes namespace")
+	rootCmd.PersistentFlags().StringVar(&virtualService, "virtual-service", "", "Name of the VirtualService resource")
+	rootCmd.PersistentFlags().StringVar(&responseCode, "response-code", "200", "Expected HTTP response code for metrics validation")
+	rootCmd.PersistentFlags().StringVar(&app, "app", "", "Destination application name for metrics query")
+	rootCmd.PersistentFlags().IntVar(&numRequests, "num-requests", 10, "Number of requests to send to the service endpoint")
+	rootCmd.PersistentFlags().IntVar(&delaySeconds, "delay-seconds", 5, "Delay in seconds to wait for metrics to sync")
+	rootCmd.PersistentFlags().IntVar(&maxRetries, "max-retries", 5, "Maximum number of retries to fetch metrics after traffic generation")
+	// Add source app flag for TCP validation
+	rootCmd.PersistentFlags().StringVar(&sourceApp, "source-app", "", "Source application name for TCP metrics query (optional)")
 
 	// Add subcommands at the end for readability
 	rootCmd.AddCommand(upstream5xxFailuresCmd)

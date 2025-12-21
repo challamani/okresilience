@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	istioClient "istio.io/client-go/pkg/clientset/versioned"
@@ -28,75 +30,50 @@ type PrometheusResponse struct {
 	} `json:"data"`
 }
 
-// QueryMetrics queries Prometheus and returns the total number of requests for the given parameters.
-func QueryMetrics(prometheusURL, app, namespace, responseCode string) (int, error) {
-	// Construct the Prometheus query with default labels
-	query := fmt.Sprintf(`istio_requests_total{destination_app="%s",namespace="%s",response_code="%s"}`,
-		app, namespace, responseCode)
-	url := fmt.Sprintf("%s/api/v1/query?query=%s", prometheusURL, query)
-
-	// Log the query for debugging
-	log.Printf("Executing Prometheus query: %s", url)
-
-	resp, err := http.Get(url)
-	if err != nil {
-		return 0, fmt.Errorf("error querying Prometheus: %v", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, fmt.Errorf("error reading Prometheus response: %v", err)
+// formatLabelSet turns a label map into a deterministic PromQL label selector string.
+// Keys are sorted to keep query strings stable for testing and logging.
+func formatLabelSet(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
 	}
 
-	var promResp PrometheusResponse
-	if err := json.Unmarshal(body, &promResp); err != nil {
-		return 0, fmt.Errorf("error unmarshalling Prometheus response: %v", err)
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(labels))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf(`%s="%s"`, k, labels[k]))
 	}
 
-	// Check if the query returned any results
-	if len(promResp.Data.Result) == 0 {
-		log.Printf("No metrics found for query: %s", query)
-		return 0, nil
-	}
-
-	// Extract metrics
-	totalRequests := 0
-	for _, result := range promResp.Data.Result {
-		// Ensure the Value slice has at least two elements
-		if len(result.Value) < 2 {
-			log.Printf("Skipping result with insufficient Value data: %v", result.Value)
-			continue
-		}
-
-		// Ensure the second element of Value is a string
-		valueStr, ok := result.Value[1].(string)
-		if !ok {
-			log.Printf("Skipping result with invalid Value data: %v", result.Value)
-			continue
-		}
-
-		// Convert the string value to an integer
-		metricValue, err := strconv.Atoi(valueStr)
-		if err != nil {
-			log.Printf("Skipping result with non-integer Value: %v", result.Value)
-			continue
-		}
-
-		totalRequests += metricValue
-	}
-
-	return totalRequests, nil
+	return strings.Join(parts, ",")
 }
 
-// QueryTcpClosedDest queries destination-side TCP closed connections filtered by response_flags (e.g., UF|URX).
-func QueryTcpClosedDest(prometheusURL, namespace, flagsCSV string) (int, error) {
+// QueryIstioRequestsTotal queries the istio_requests_total metric using the provided label set.
+// Labels are passed as key/value pairs to support dynamic label selection at the call site.
+func QueryIstioRequestsTotal(prometheusURL string, labels map[string]string) (int, error) {
+	return queryPrometheusTotal(prometheusURL, "istio_requests_total", labels)
+}
 
-	query := fmt.Sprintf(`istio_tcp_connections_closed_total{namespace="%s",response_flags="%s"}`,
-		namespace, flagsCSV)
+// QueryIstioTcpConnectionsClosedTotal queries the istio_tcp_connections_closed_total metric using the provided label set.
+// Labels are passed as key/value pairs to support dynamic label selection at the call site.
+func QueryIstioTcpConnectionsClosedTotal(prometheusURL string, labels map[string]string) (int, error) {
+	return queryPrometheusTotal(prometheusURL, "istio_tcp_connections_closed_total", labels)
+}
+
+// queryPrometheusTotal executes a Prometheus instant query for the given metric and labels and
+// returns the summed integer value across all returned series.
+func queryPrometheusTotal(prometheusURL, metric string, labels map[string]string) (int, error) {
+	labelExpr := formatLabelSet(labels)
+	query := metric
+	if labelExpr != "" {
+		query = fmt.Sprintf("%s{%s}", metric, labelExpr)
+	}
+
 	url := fmt.Sprintf("%s/api/v1/query?query=%s", prometheusURL, query)
-
-	log.Printf("Executing Prometheus query (dest TCP closed): %s", url)
+	log.Printf("Executing Prometheus query: %s", url)
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -125,19 +102,22 @@ func QueryTcpClosedDest(prometheusURL, namespace, flagsCSV string) (int, error) 
 			log.Printf("Skipping result with insufficient Value data: %v", result.Value)
 			continue
 		}
+
 		valueStr, ok := result.Value[1].(string)
 		if !ok {
 			log.Printf("Skipping result with invalid Value data: %v", result.Value)
 			continue
 		}
-		// Prom returns float as string; parse to float then cast
+
 		valFloat, err := strconv.ParseFloat(valueStr, 64)
 		if err != nil {
 			log.Printf("Skipping result with non-float Value: %v", result.Value)
 			continue
 		}
+
 		total += int(valFloat)
 	}
+
 	return total, nil
 }
 
