@@ -18,7 +18,7 @@ const (
 )
 
 func main() {
-	var prometheusURL, serviceEndpoint, namespace, virtualService, responseCode, app, sourceApp string
+	var prometheusURL, serviceEndpoint, namespace, virtualService, destinationRule, responseCode, app string
 	var numRequests, delaySeconds, maxRetries int
 
 	rootCmd := &cobra.Command{
@@ -104,9 +104,7 @@ func main() {
 			closedLabels := map[string]string{
 				"namespace":      namespace,
 				"response_flags": "UF,URX",
-			}
-			if sourceApp != "" {
-				closedLabels["source_app"] = sourceApp
+				"app":            app,
 			}
 
 			beforeClosed, err := metrics.QueryIstioTcpConnectionsClosedTotal(prometheusURL, closedLabels)
@@ -165,6 +163,7 @@ func main() {
 				"destination_app": app,
 				"namespace":       namespace,
 				"response_code":   "0",
+				"response_flags":  "DC",
 			})
 			if err != nil {
 				log.Fatalf("Error querying upstream metrics (responseCode=0) before: %v", err)
@@ -195,6 +194,7 @@ func main() {
 					"destination_app": app,
 					"namespace":       namespace,
 					"response_code":   "0",
+					"response_flags":  "DC",
 				})
 				if err != nil {
 					log.Printf("Error querying upstream metrics (responseCode=0) after (attempt %d): %v", attempt, err)
@@ -215,6 +215,78 @@ func main() {
 		},
 	}
 
+	outlierDetectionVerifyCmd := &cobra.Command{
+		Use:   "outlierDetectionVerify",
+		Short: "Validate Outlier Detection configuration in DestinationRule",
+		Run: func(cmd *cobra.Command, args []string) {
+			// Fetch outlier detection configuration
+			consecutive5xxErrors, err := metrics.GetOutlierDetectionConfiguration(namespace, destinationRule)
+			if err != nil {
+				log.Fatalf("Error fetching outlier detection configuration: %v", err)
+			}
+			fmt.Printf("%sOutlierDetection: DestinationRule %s in namespace %s has consecutive5xxErrors=%d%s\n", colorGreen, destinationRule, namespace, consecutive5xxErrors, colorReset)
+
+			//Outlier detection on upstream 5xx failures scenario
+			gateway_503UH_Labels := map[string]string{
+				"destination_service_name": app,
+				"app":                      "istio-ingressgateway",
+				"namespace":                "istio-system",
+				"response_flags":           "UH",
+				"response_code":            "503",
+			}
+
+			gateway_500URX_Labels := map[string]string{
+				"destination_service_name": app,
+				"app":                      "istio-ingressgateway",
+				"namespace":                "istio-system",
+				"response_flags":           "URX",
+				"response_code":            "500",
+			}
+
+			//Query Gateway 503/UH metrics
+			gateway_503UH_Metrics_Before, err := metrics.QueryIstioRequestsTotal(prometheusURL, gateway_503UH_Labels)
+			if err != nil {
+				log.Fatalf("Error querying gateway metrics (%s) before: %v",gateway_503UH_Labels,err)
+			}
+			log.Printf("Gateway metrics (%s) before: %d", gateway_503UH_Labels, gateway_503UH_Metrics_Before)
+			//Query Gateway 500/URX metrics
+			gateway_500URX_Metrics_Before, err := metrics.QueryIstioRequestsTotal(prometheusURL, gateway_500URX_Labels)
+			if err != nil {
+				log.Fatalf("Error querying Gateway metrics (%s) before: %v",gateway_500URX_Labels,err)
+			}
+			log.Printf("Gateway metrics (%s) before: %d", gateway_500URX_Labels, gateway_500URX_Metrics_Before)
+			
+			// Generate test traffic
+			_, err = traffic.GenerateTraffic(serviceEndpoint, namespace, virtualService, numRequests)
+			if err != nil {
+				log.Fatalf("Error generating traffic: %v", err)
+			}
+			log.Printf("Traffic generation completed for service %s in namespace %s", virtualService, namespace)
+
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				log.Printf("Waiting %d seconds for metrics to sync (attempt %d/%d)...", delaySeconds, attempt, maxRetries)
+				time.Sleep(time.Duration(delaySeconds) * time.Second)
+
+				gateway_500URX_Metrics_After, err := metrics.QueryIstioRequestsTotal(prometheusURL, gateway_500URX_Labels)
+				if err != nil {
+					log.Fatalf("Error querying upstream metrics (%s) after: %v", gateway_500URX_Labels,err)
+				}
+				log.Printf("Gateway metrics (%s) after: %d", gateway_500URX_Labels, gateway_500URX_Metrics_After)
+				gateway_503UH_Metrics_After, err := metrics.QueryIstioRequestsTotal(prometheusURL, gateway_503UH_Labels)
+				if err != nil {
+					log.Fatalf("Error querying gateway metrics (%s) after: %v", gateway_503UH_Labels, err)
+				}
+				log.Printf("Gateway metrics (%s) after: %d", gateway_503UH_Labels, gateway_503UH_Metrics_After)
+				actualGateway503UHErrors := gateway_503UH_Metrics_After - gateway_503UH_Metrics_Before
+				actualGateway500Errors := gateway_500URX_Metrics_After - gateway_500URX_Metrics_Before
+				if actualGateway500Errors >= 0 && actualGateway503UHErrors > 0 {
+					fmt.Printf("%sOutlierDetection: Validation completed. Gateway 503/UH metrics are indicating that outlier detection has occurred, on 500 upstream errors: %d%s\n.", colorGreen, actualGateway500Errors, colorReset)
+					return
+				}
+			}
+			fmt.Printf("%sOutlierDetection: Validation failed. No Gateway 503/UH responses observed.%s\n", colorRed, colorReset)
+		},
+	}
 	// (subcommands defined above)
 	// Shared flags for all subcommands via root persistent flags
 	rootCmd.PersistentFlags().StringVar(&prometheusURL, "prometheus-url", "", "Prometheus server URL")
@@ -226,13 +298,13 @@ func main() {
 	rootCmd.PersistentFlags().IntVar(&numRequests, "num-requests", 10, "Number of requests to send to the service endpoint")
 	rootCmd.PersistentFlags().IntVar(&delaySeconds, "delay-seconds", 5, "Delay in seconds to wait for metrics to sync")
 	rootCmd.PersistentFlags().IntVar(&maxRetries, "max-retries", 5, "Maximum number of retries to fetch metrics after traffic generation")
-	// Add source app flag for TCP validation
-	rootCmd.PersistentFlags().StringVar(&sourceApp, "source-app", "", "Source application name for TCP metrics query (optional)")
+	rootCmd.PersistentFlags().StringVar(&destinationRule, "destination-rule", "", "Name of the DestinationRule resource")
 
 	// Add subcommands at the end for readability
 	rootCmd.AddCommand(upstream5xxFailuresCmd)
 	rootCmd.AddCommand(upstreamTcpResetCmd)
 	rootCmd.AddCommand(gatewayTimeoutVerifyCmd)
+	rootCmd.AddCommand(outlierDetectionVerifyCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalf("Error executing command: %v", err)

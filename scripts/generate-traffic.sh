@@ -3,7 +3,8 @@
 set -euo pipefail
 
 MODE=${1:-status}
-REQUEST_COUNT=${REQUEST_COUNT:-50}
+REQUEST_COUNT=${2:-50}
+STATUS_CODE=${3:-200}
 INGRESS_IP=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 if [[ -z "${INGRESS_IP}" ]]; then
@@ -13,7 +14,7 @@ fi
 
 case "${MODE}" in
     status)
-        ENDPOINT="/status/200"
+        ENDPOINT="/status/${STATUS_CODE}"
         CURL_FLAGS=(-s -D - -o /dev/null)
         ;;
     header)

@@ -33,4 +33,4 @@ print_msg "Running resilience test for upstream TCP resets..."
     --virtual-service=tcp-reset-vs \
     --num-requests=1 \
     --response-code=503 \
-    --source-app=istio-ingressgateway
+    --app=tcp-reset-service

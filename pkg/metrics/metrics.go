@@ -192,6 +192,26 @@ func GetTimeoutConfiguration(namespace, serviceName string) (time.Duration, time
 	return timeout, perTryTimeout, nil
 }
 
+func GetOutlierDetectionConfiguration(namespace, serviceName string) (int32, error) {
+	config, err := getKubernetesConfig()
+	if err != nil {
+		return 0, fmt.Errorf("error creating Kubernetes config: %v", err)
+	}
+	istioClientset, err := istioClient.NewForConfig(config)
+	if err != nil {
+		return 0, fmt.Errorf("error creating Istio client: %v", err)
+	}
+	destinationRule, err := istioClientset.NetworkingV1beta1().DestinationRules(namespace).Get(context.TODO(), serviceName, metav1.GetOptions{})
+	if err != nil { 
+		return 0, fmt.Errorf("error fetching DestinationRule: %v", err)
+	}
+
+	consecutive5xxErrors := destinationRule.Spec.TrafficPolicy.OutlierDetection.Consecutive_5XxErrors.Value
+	if consecutive5xxErrors == 0 {
+		return 0, fmt.Errorf("consecutive5xxErrors not configured in DestinationRule")
+	}
+	return int32(consecutive5xxErrors), nil
+}
 // getKubernetesConfig is a variable that holds a function to fetch Kubernetes configuration.
 // It can be overridden in tests to mock the behavior.
 var getKubernetesConfig = func() (*rest.Config, error) {

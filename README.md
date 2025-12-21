@@ -127,7 +127,7 @@ With this test you can validate that the gateway retries requests when TCP reset
     --virtual-service=tcp-reset-vs \
     --num-requests=1 \
     --response-code=503 \
-    --source-app=istio-ingressgateway
+    --app=tcp-reset-service
 ```
 
 ### Validate Gateway timeout behavior

@@ -30,7 +30,7 @@ print_msg "Running resilience test for upstream TCP resets..."
     --virtual-service=tcp-reset-vs \
     --num-requests=1 \
     --response-code=503 \
-    --source-app=istio-ingressgateway
+    --app=tcp-reset-service 
 
 print_msg "Running resilience test for gateway timeout verification..."
 ./okresilience gatewayTimeoutVerify \
@@ -39,4 +39,17 @@ print_msg "Running resilience test for gateway timeout verification..."
     --namespace=demo \
     --virtual-service=httpbin-vs \
     --num-requests=1 \
+    --app=httpbin
+
+
+print_msg "Generating traffic to httpbin service to reset upstream stats in ingress gateway..."
+./scripts/generate-traffic.sh status 10
+
+print_msg "Running resilience test for gateway outlier detection verification..."
+./okresilience outlierDetectionVerify \
+    --prometheus-url=http://prometheus.local \
+    --service-endpoint=http://httpbin.local/status/500 \
+    --namespace=demo \
+    --virtual-service=httpbin-vs \
+    --num-requests=5 \
     --app=httpbin
