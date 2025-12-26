@@ -54,3 +54,7 @@ print_msg "Running resilience test for gateway outlier detection verification...
     --destination-rule=httpbin-dr \
     --num-requests=5 \
     --app=httpbin
+
+# After outlier detection test, wait for some time to allow Envoy to recover
+# Upstream stats may take some time to reset after outlier ejection
+sleep 30
