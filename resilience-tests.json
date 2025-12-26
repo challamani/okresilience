@@ -1,5 +1,32 @@
 [
     {
+        "name":"okResponseVerify",
+        "description":"Test to verify gateway handles OK responses correctly",
+        "prometheus_url":"http://prometheus.local",
+        "service_endpoint":"http://httpbin.local/status/200",
+        "namespace":"demo",
+        "virtual_service":"httpbin-vs",
+        "num_requests":10,
+        "expected_response_codes":[200, 200, 200, 200, 200, 200, 200, 200, 200, 200],
+        "app":"httpbin",
+        "type":"ok-response",
+        "assertions": [
+            {
+                "source":"metric",
+                "metric_name":"istio_requests_total",
+                "labels":{
+                    "destination_app": "httpbin",
+                    "namespace":       "demo",
+                    "response_code":   "200"
+                },
+                "expected":{
+                    "operator": "eq",
+                    "value":    10
+                } 
+            }
+        ]
+    },
+    {
         "name":"upstream5xxFailures",
         "description":"Test to verify gateway retries on upstream 5xx failures",
         "prometheus_url":"http://prometheus.local",
@@ -82,8 +109,8 @@
         ]
     },
     {
-        "name":"gatewayTimeoutVerify",
-        "description":"Test to verify gateway timeouts for long response times",
+        "name":"okResponseVerify",
+        "description":"Test to verify gateway handles OK responses correctly",
         "prometheus_url":"http://prometheus.local",
         "service_endpoint":"http://httpbin.local/status/200",
         "namespace":"demo",

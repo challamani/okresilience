@@ -51,5 +51,6 @@ print_msg "Running resilience test for gateway outlier detection verification...
     --service-endpoint=http://httpbin.local/status/500 \
     --namespace=demo \
     --virtual-service=httpbin-vs \
+    --destination-rule=httpbin-dr \
     --num-requests=5 \
     --app=httpbin
