@@ -88,7 +88,7 @@
         "namespace":"demo",
         "virtual_service":"httpbin-vs",
         "num_requests":1,
-        "expected_response_codes":[503],
+        "expected_response_codes":[504],
         "app":"httpbin",
         "type":"timeout",
         "assertions": [
