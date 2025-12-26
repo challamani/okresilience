@@ -98,6 +98,12 @@ go mod tidy
 go build -o okresilience ./cmd/okresilience
 ```
 
+- Build the resilience executor:
+
+```bash
+go build -o resilience-executor ./cmd/test-runner
+```
+
 ## Run
 
 ### Validate upstream 5xx failures with retries
@@ -149,10 +155,217 @@ Expected:
 - Upstream metrics with `responseCode=0` increase by `num-requests * (timeout / perTryTimeout)`
 - All downstream responses are HTTP 504 (Gateway Timeout)
 
+## Resilience Executor
+
+The resilience executor is a comprehensive tool that parses and executes resilience test cases from a JSON configuration file. It's designed to sequentially run multiple test scenarios with different assertion types, supporting automatic metric validation with retry logic.
+
+### Building the Executor
+
+```bash
+go build -o resilience-executor ./cmd/test-runner
+```
+
+### Test File Format
+
+The executor uses a JSON file to define test cases. Each test case includes:
+
+- **name**: Test case identifier
+- **description**: Human-readable description of what the test validates
+- **type**: Test category (retry-5xx, retry-tcp-errors, timeout, ok-response, outlier-detection)
+- **prometheus_url**: Prometheus server endpoint
+- **service_endpoint**: Target service URL for traffic generation
+- **namespace**: Kubernetes namespace
+- **virtual_service**: Name of the VirtualService resource (optional if using destination_rule)
+- **destination_rule**: Name of the DestinationRule resource (optional if using virtual_service)
+- **num_requests**: Number of requests to generate
+- **expected_response_codes**: Array of expected HTTP status codes (validated during execution)
+- **app**: Application/destination name for metrics queries
+- **assertions**: Array of metric assertions to validate
+
+Each assertion includes:
+
+- **source**: Currently supports "metric"
+- **metric_name**: Name of the Prometheus metric (e.g., istio_requests_total, istio_tcp_connections_closed_total)
+- **labels**: Label selectors for the metric query
+- **expected**: Object with operator and value to validate against
+  - **operator**: Comparison operator (eq, gte, lte, gt, lt)
+  - **value**: Expected metric difference value
+
+### Example Test Configuration
+
+See [resilience-tests.json](resilience-tests.json) for complete examples. Here's a sample:
+
+```json
+{
+    "name": "upstream5xxFailures",
+    "description": "Test to verify gateway retries on upstream 5xx failures",
+    "prometheus_url": "http://prometheus.local",
+    "service_endpoint": "http://httpbin.local/status/500",
+    "namespace": "demo",
+    "virtual_service": "httpbin-vs",
+    "num_requests": 1,
+    "expected_response_codes": [500],
+    "app": "httpbin",
+    "type": "retry-5xx",
+    "assertions": [
+        {
+            "source": "metric",
+            "metric_name": "istio_requests_total",
+            "labels": {
+                "destination_app": "httpbin",
+                "response_code": "500",
+                "namespace": "demo"
+            },
+            "expected": {
+                "operator": "eq",
+                "value": 4
+            }
+        }
+    ]
+}
+```
+
+### Running Tests
+
+#### Using the Shell Script (Recommended)
+
+The script automatically builds the binary before running tests:
+
+```bash
+./scripts/resilience-executor.sh
+```
+
+With options:
+
+```bash
+./scripts/resilience-executor.sh --test upstream5xxFailures --delay 3 --retries 10
+./scripts/resilience-executor.sh -f custom-tests.json -t outlierDetectionVerify
+```
+
+#### Using the Binary Directly
+
+Build first:
+
+```bash
+go build -o resilience-executor ./cmd/test-runner
+```
+
+Then run:
+
+```bash
+./resilience-executor --test-file=resilience-tests.json
+```
+
+#### Run a Specific Test
+
+```bash
+./scripts/resilience-executor.sh --test upstream5xxFailures
+```
+
+Or directly with binary:
+
+```bash
+./resilience-executor --test-file=resilience-tests.json --test-name=upstream5xxFailures
+```
+
+#### Custom Retry Configuration
+
+```bash
+./scripts/resilience-executor.sh --retries 10 --delay 3
+```
+
+Or with binary:
+
+```bash
+./resilience-executor \
+    --test-file=resilience-tests.json \
+    --max-retries=10 \
+    --delay-seconds=3
+```
+
+### Test Execution Flow
+
+For each test case, the executor:
+
+1. **Validates Configuration**: Ensures all required fields are present
+2. **Captures Baseline Metrics**: Queries Prometheus for initial metric values
+3. **Generates Traffic**: Sends the specified number of requests to the service
+4. **Validates Response Codes**: Verifies actual response codes match expected values
+5. **Waits for Metrics Sync**: Implements retry logic (default: 5 retries with 5-second delays)
+6. **Queries Metrics After**: Fetches updated metric values from Prometheus
+7. **Validates Assertions**: Checks if metric differences match expected values using comparison operators
+8. **Reports Results**: Displays PASSED/FAILED status with detailed assertion breakdown
+
+### Assertion Operators
+
+- **eq**: Exact equality (actual == expected)
+- **gte**: Greater than or equal (actual >= expected)
+- **lte**: Less than or equal (actual <= expected)
+- **gt**: Greater than (actual > expected)
+- **lt**: Less than (actual < expected)
+
+### Output Features
+
+The executor provides:
+
+- **Welcome Banner**: Clear test suite identification
+- **Test Counter**: Shows [N/M] for test progress
+- **Real-time Logging**: Detailed step-by-step execution logs
+- **Response Code Validation**: Visual indicators (✓/✗) for each request
+- **Assertion Tracking**: Per-assertion pass/fail status with metric deltas
+- **Progress Indicators**: Visual feedback during metric syncing
+- **Summary Report**: 
+  - Test and assertion pass rates
+  - Progress bar showing completion percentage
+  - Color-coded final status
+  - Clear success/failure banners
+
+Example output:
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║           OkResilience - Gateway Resilience Validator         ║
+╚═══════════════════════════════════════════════════════════════╝
+
+[1/5] Executing: upstream5xxFailures (retry-5xx)
+  ⏳ Capturing baseline metrics (1 assertion(s))...
+    • Assertion 0: istio_requests_total = 38
+  ✓ Baseline metrics captured
+  🚀 Generating 1 request(s)...
+    • Request 1: ✓ 500
+  ✓ All response codes matched expectations
+  ⏳ Validating metrics (max 5 retries, 5 second delays)...
+    • Assertion 0: ✓ (diff=4, expected eq 4)
+  ✓ Metrics validation passed on attempt 1
+
+┌─────────────────────────────────────────────────────────────────
+  ✓ PASSED | upstream5xxFailures
+  Assertions: 1 passed, 0 failed (total: 1)
+─────────────────────────────────────────────────────────────────
+
+╔═══════════════════════════════════════════════════════════════╗
+║                    📊 EXECUTION SUMMARY                       ║
+║  ✓ All tests PASSED! Gateway resilience verified successfully. ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+### Command-Line Flags
+
+- `--test-file` (default: "resilience-tests.json"): Path to the test cases JSON file
+- `--max-retries` (default: 5): Maximum number of retries for metric validation
+- `--delay-seconds` (default: 5): Delay in seconds between retry attempts
+- `--test-name` (default: ""): Optional filter to run a specific test by name
+
 ## Running Unit Tests
 
 ```bash
 go test ./... -v
+```
+
+Test the resilience executor specifically:
+
+```bash
+go test ./cmd/test-runner -v
 ```
 
 ## TCP Failure Simulation

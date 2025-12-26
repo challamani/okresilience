@@ -76,7 +76,7 @@
                 },
                 "expected":{
                     "operator": "eq",
-                    "value":    4
+                    "value":    3
                 }
             }
         ]

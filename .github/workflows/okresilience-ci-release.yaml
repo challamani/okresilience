@@ -112,6 +112,11 @@ jobs:
         run: |
           set -eux
           bash "${{ env.SCRIPTS_DIR }}/integration-tests.sh"
+      
+      - name: Run tests - through resilience-executor
+        run: |
+          set -eux
+          bash "${{ env.SCRIPTS_DIR }}/resilience-executor.sh"
 
       - name: Create GitHub Release (only on tagged push)
         if: startsWith(github.ref, 'refs/tags/')
