@@ -1,0 +1,168 @@
+[
+    {
+        "name":"upstream5xxFailures",
+        "description":"Test to verify gateway retries on upstream 5xx failures",
+        "prometheus_url":"http://prometheus.local",
+        "service_endpoint":"http://httpbin.local/status/500",
+        "namespace":"demo",
+        "virtual_service":"httpbin-vs",
+        "num_requests":1,
+        "expected_response_codes":[500],
+        "app":"httpbin",
+        "type":"retry-5xx",
+        "assertions": [
+            {
+                "source":"metric",
+                "metric_name":"istio_requests_total",
+                "labels":{
+                    "destination_app":"httpbin",
+                    "response_code":"500",
+                    "namespace":"demo"
+                },
+                "expected":{
+                    "operator": "eq",
+                    "value":    4
+                }
+            }
+        ]
+    },
+    {
+        "name":"upstreamTcpReset",
+        "description":"Test to verify gateway resilience on upstream TCP resets",
+        "prometheus_url":"http://prometheus.local",
+        "service_endpoint":"http://tcp-reset-service.local/",
+        "namespace":"tcp-ns",
+        "virtual_service":"tcp-reset-vs",
+        "num_requests":1,
+        "expected_response_codes":[503],
+        "app":"tcp-reset-service",
+        "type":"retry-tcp-errors",
+        "assertions": [
+            {
+                "source":"metric",
+                "metric_name":"istio_tcp_connections_closed_total",
+                "labels":{
+                    "app":"tcp-reset-service",
+                    "response_flags": "UF,URX",
+                    "namespace":"tcp-ns"
+                },
+                "expected":{
+                    "operator": "eq",
+                    "value":    2
+                }
+            }
+        ]
+    },
+    {
+        "name":"gatewayTimeoutVerify",
+        "description":"Test to verify gateway timeouts for long response times",
+        "prometheus_url":"http://prometheus.local",
+        "service_endpoint":"http://httpbin.local/delay/3",
+        "namespace":"demo",
+        "virtual_service":"httpbin-vs",
+        "num_requests":1,
+        "expected_response_codes":[503],
+        "app":"httpbin",
+        "type":"timeout",
+        "assertions": [
+            {
+                "source":"metric",
+                "metric_name":"istio_requests_total",
+                "labels":{
+                    "destination_app": "httpbin",
+                    "namespace":       "demo",
+                    "response_code":   "0",
+                    "response_flags":  "DC"
+                },
+                "expected":{
+                    "operator": "eq",
+                    "value":    4
+                }
+            }
+        ]
+    },
+    {
+        "name":"gatewayTimeoutVerify",
+        "description":"Test to verify gateway timeouts for long response times",
+        "prometheus_url":"http://prometheus.local",
+        "service_endpoint":"http://httpbin.local/status/200",
+        "namespace":"demo",
+        "virtual_service":"httpbin-vs",
+        "num_requests":10,
+        "expected_response_codes":[200, 200, 200, 200, 200, 200, 200, 200, 200, 200],
+        "app":"httpbin",
+        "type":"ok-response",
+        "assertions": [
+            {
+                "source":"metric",
+                "metric_name":"istio_requests_total",
+                "labels":{
+                    "destination_app": "httpbin",
+                    "namespace":       "demo",
+                    "response_code":   "200"
+                },
+                "expected":{
+                    "operator": "eq",
+                    "value":    10
+                } 
+            }
+        ]
+    },
+    {
+        "name":"outlierDetectionVerify",
+        "description":"Test to verify gateway outlier detection functionality",
+        "prometheus_url":"http://prometheus.local",
+        "service_endpoint":"http://httpbin.local/status/500",
+        "namespace":"demo",
+        "virtual_service":"httpbin-vs",
+        "num_requests":5,
+        "expected_response_codes":[500, 500, 500, 503, 503],
+        "app":"httpbin",
+        "type":"outlier-detection",
+        "assertions": [
+            {
+                "source":"metric",
+                "metric_name":"istio_requests_total",
+                "labels":{
+                    "destination_service_name": "httpbin",
+                    "app":                      "istio-ingressgateway",
+                    "namespace":                "istio-system",
+                    "response_flags":           "UH",
+                    "response_code":            "503"
+                },
+                "expected":{
+                    "operator": "gte",
+                    "value":    1
+                }
+            },
+            {
+                "source":"metric",
+                "metric_name":"istio_requests_total",
+                "labels":{
+                    "destination_service_name": "httpbin",
+                    "app":                      "istio-ingressgateway",
+                    "namespace":                "istio-system",
+                    "response_flags":           "URX",
+                    "response_code":            "500"
+                },
+                "expected":{
+                    "operator": "gte",
+                    "value":    3
+                }
+            },
+            {
+                "source":"metric",
+                "metric_name":"istio_requests_total",
+                "labels":{
+                    "app":                      "httpbin",
+                    "namespace":                "demo",
+                    "response_code":            "500"
+                },
+                "expected":{
+                    "operator": "gte",
+                    "value":    15
+                }
+            }
+        ]
+    }
+]
